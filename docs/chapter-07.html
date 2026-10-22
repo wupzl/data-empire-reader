@@ -4,9 +4,6 @@
 <div class="reader-layout"><aside class="sidebar"><p class="eyebrow">THE EMPIRE’S JOURNEY</p><nav aria-label="全书章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="current" href="chapter-07.html" aria-current="page"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><details class="local-toc" open><summary>本章线索</summary><div class="toc">
 <ul>
 <li><a href="#_1">第一幕：十亿条事件，帝国全面告急</a></li>
-<li><a href="#120000s">120,000/s</a></li>
-<li><a href="#65000s">65,000/s</a></li>
-<li><a href="#95s">95s</a></li>
 <li><a href="#_2">第二幕：背压——为什么下游堵塞会向上游传染？</a></li>
 <li><a href="#kafka-lag">第三幕：第一道诊断——Kafka Lag 到底说明了什么？</a></li>
 <li><a href="#kafka-lag_1">Kafka Lag 模拟器</a></li>
@@ -24,9 +21,6 @@
 </details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 07 <span>/ 08 · 约 27 分钟</span></p><h1>背压风暴——千万级实时系统的生死线</h1><p class="topics">背压 · Checkpoint · 状态 · 热点治理</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="current" href="chapter-07.html" aria-current="page"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
 <ul>
 <li><a href="#_1">第一幕：十亿条事件，帝国全面告急</a></li>
-<li><a href="#120000s">120,000/s</a></li>
-<li><a href="#65000s">65,000/s</a></li>
-<li><a href="#95s">95s</a></li>
 <li><a href="#_2">第二幕：背压——为什么下游堵塞会向上游传染？</a></li>
 <li><a href="#kafka-lag">第三幕：第一道诊断——Kafka Lag 到底说明了什么？</a></li>
 <li><a href="#kafka-lag_1">Kafka Lag 模拟器</a></li>
@@ -59,18 +53,40 @@
 <p>全国一千万名用户陆续进入直播间。</p>
 <p>订单、支付、弹幕、点赞与商品点击事件汇聚成一条巨大的数据洪流。</p>
 <p>监控大厅内，国王 Java 正盯着屏幕。</p>
-<p>帝国实时计算监控 · 模拟事故</p>
-<p>严重积压</p>
-<p>Kafka 事件写入速率</p>
-<h2 id="120000s">120,000/s</h2>
-<p>Flink 处理速率</p>
-<h2 id="65000s">65,000/s</h2>
-<p>Consumer Lag</p>
-<p><strong>8,250,000</strong></p>
-<p>Checkpoint 耗时</p>
-<h2 id="95s">95s</h2>
-<p>090万180万270万360万0s10s20s30s40s50s60s</p>
-<p>虚构的连续 60 秒事故观测，展示积压持续增长的趋势。</p>
+<p><strong>帝国实时计算监控 · 模拟事故 / 严重积压</strong></p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>当前读数</th>
+<th>观察重点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Kafka 事件写入速率</td>
+<td>120,000 / 秒</td>
+<td>上游持续输入</td>
+</tr>
+<tr>
+<td>Flink 处理速率</td>
+<td>65,000 / 秒</td>
+<td>低于输入速率</td>
+</tr>
+<tr>
+<td>Consumer Lag</td>
+<td>8,250,000 条</td>
+<td>当前积压存量</td>
+</tr>
+<tr>
+<td>Checkpoint 耗时</td>
+<td>95 秒</td>
+<td>快照耗时增加</td>
+</tr>
+</tbody>
+</table>
+<p>按恒定速率估算，净新增积压为 <strong>55,000 条/秒</strong>，60 秒新增 <strong>330 万条</strong>。这不是总积压，也不是实测曲线。</p>
+<p>以上为虚构事故读数，用于展示排障思路。</p>
 <p>“陛下！”</p>
 <p>监控官慌忙冲进大殿。</p>
 <p>“Kafka 正在持续积压！”</p>
@@ -119,15 +135,8 @@ ClickHouse Sink
 <h3 id="_3">一、背压的本质</h3>
 <p>背压（Backpressure）是一种流量控制现象：当下游无法及时接收数据时，压力通过处理链路向上游传播，避免无限制地向有限缓冲区写入。</p>
 <h3 id="_4">背压传播过程</h3>
-<p>Kafka Source</p>
-<p>读取速度被迫下降</p>
-<p>Parse</p>
-<p>输出缓冲逐渐填满</p>
-<p>Window Aggregate</p>
-<p>等待下游释放空间</p>
-<p>ClickHouse Sink</p>
-<p>真正的处理瓶颈</p>
-<p>示意：数据向下流动，阻塞压力可能向上游传播。实际 Flink 网络交换、算子链和背压状态会因执行拓扑而不同。</p>
+<figure class="concept"><figcaption>数据向下游流动；阻塞压力向上游传播</figcaption><ol class="concept-flow"><li><strong>Kafka Source</strong><span>受下游压力影响，读取速度下降</span></li><li><strong>Parse</strong><span>输出缓冲逐渐填满</span></li><li><strong>Window Aggregate</strong><span>等待下游释放空间</span></li><li><strong>ClickHouse Sink</strong><span>本例中真正的处理瓶颈</span></li></ol><p class="concept-note">数据方向：Source → Sink；压力方向：Sink → Source。真实网络交换、算子链与背压状态取决于执行拓扑。</p></figure>
+
 <p>国王恍然大悟。</p>
 <p>“也就是说，Kafka Lag 增长，未必是 Kafka 本身出了问题？”</p>
 <p>“正是。”</p>
@@ -209,18 +218,29 @@ Consumer Rate: 65000 records/s
 <p>“但不是所有算子都能链在一起。”</p>
 <p>“例如 <code>keyBy</code> 引入的数据重新分区通常会形成交换边界。”</p>
 <h3 id="flink">Flink 运行结构示意</h3>
-<p>JobManager</p>
-<p>作业协调、调度与恢复</p>
-<p>TaskManager 1</p>
-<p>Slot 1</p>
-<p>运行任务</p>
-<p>Slot 2</p>
-<p>运行任务</p>
-<p>TaskManager 2</p>
-<p>Slot 1</p>
-<p>运行任务</p>
-<p>Slot 2</p>
-<p>运行任务</p>
+<p><strong>协调层：JobManager</strong> 负责作业协调、调度与恢复。</p>
+<table>
+<thead>
+<tr>
+<th>执行节点</th>
+<th>资源分配示意</th>
+<th>执行内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TaskManager 1</td>
+<td>Slot 1、Slot 2</td>
+<td>运行分配到的任务</td>
+</tr>
+<tr>
+<td>TaskManager 2</td>
+<td>Slot 1、Slot 2</td>
+<td>运行分配到的任务</td>
+</tr>
+</tbody>
+</table>
+<p><strong>层次关系</strong>：作业由协调层调度，在多个 TaskManager 上执行；Slot 是资源分配抽象，不能直接当作一个 CPU 核或一个线程。</p>
 <p>架构师补充：</p>
 <p>“并行度决定一个算子同时可以有多少个并行实例。”</p>
 <p>“Slot 决定框架如何安排相应资源。”</p>
@@ -267,8 +287,6 @@ Consumer Rate: 65000 records/s
 <p>“所以，我们应分别观察 Checkpoint 的开始延迟、对齐时间、同步阶段、异步阶段和整体完成时间。”</p>
 <p>“如果不区分是哪一段慢，直接调整超时时间，只能暂时掩盖问题。”</p>
 <p>Flink 官方的 Checkpoint 调优文档也强调，应将持续背压、Barrier 对齐、状态快照和存储开销分别分析。</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://nightlies.apache.org\&amp;sz=32">image</a></p>
-<p>Apache Flink</p>
 <h3 id="unaligned-checkpoint-barrier">四、Unaligned Checkpoint：让 Barrier 穿过拥堵河道</h3>
 <p>国王问：</p>
 <p>“如果 Barrier 总是被缓冲区中的数据阻挡，能不能让它更快通过？”</p>
@@ -295,8 +313,6 @@ Consumer Rate: 65000 records/s
 <p>“它还可能增加 Checkpoint 数据量、存储 I/O 和恢复开销。”</p>
 <p>“如果真正瓶颈是 Checkpoint 存储写入太慢，开启 Unaligned 甚至可能让情况更糟。”</p>
 <p>“所以它是特定问题的优化手段，不是万能开关。”&#x20;</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://nightlies.apache.org\&amp;sz=32">image</a></p>
-<p>Apache Flink</p>
 <h2 id="rocksdb">第六幕：RocksDB 地下城——一亿用户的状态存在哪里？</h2>
 <p>第二天，国王发现 Flink 的某个任务维护了海量用户状态。</p>
 <p>他问：</p>
@@ -359,8 +375,6 @@ Consumer Rate: 65000 records/s
 <p>“状态后端不等于 Checkpoint 持久化位置。”</p>
 <p>“状态后端负责如何管理工作状态，Checkpoint 存储负责快照最终可靠保存在何处。”</p>
 <p>“即使使用 RocksDB，也需要考虑本地磁盘空间、远端 Checkpoint 存储、恢复时间和状态 TTL。”&#x20;</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://apache.googlesource.com\&amp;sz=32">image</a></p>
-<p>apache.googlesource.com</p>
 <p>国王问：</p>
 <p>“那是不是 RocksDB 一定比 HashMap 更好？”</p>
 <p>“不。”</p>
@@ -470,8 +484,6 @@ Task 7 → Key Group 112—127
 
 <p>“这样，Flink 能够按照 Key Group 重新分配状态，而不是让每个业务用户自己负责迁移。”</p>
 <p>Flink 的官方状态模型明确说明了 Key Group 与并行度调整之间的关系。</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://github.com\&amp;sz=32">image</a></p>
-<p>GitHub</p>
 <h3 id="savepoint">三、Savepoint 发布流程</h3>
 <p>架构师给国王演示一个常见的受控升级流程。</p>
 <div class="codehilite"><pre><span></span><code>正在运行的 Flink Job

@@ -21,19 +21,19 @@
     "number": 4,
     "title": "分布式大陆——Hadoop 与 MapReduce 的诞生",
     "topics": "HDFS · MapReduce · Shuffle · YARN",
-    "minutes": 39
+    "minutes": 41
   },
   {
     "number": 5,
     "title": "Spark 崛起——内存计算与 DAG 战争",
     "topics": "RDD · DAG · Spark SQL · 执行计划",
-    "minutes": 30
+    "minutes": 31
   },
   {
     "number": 6,
     "title": "实时之河——Kafka 与 Flink 的崛起",
     "topics": "Kafka · Flink · 事件时间 · Watermark",
-    "minutes": 35
+    "minutes": 36
   },
   {
     "number": 7,
@@ -45,6 +45,6 @@
     "number": 8,
     "title": "千万级帝国——从零设计真正的高并发直播系统",
     "topics": "容量规划 · 长连接 · 高可用 · 可观测性",
-    "minutes": 35
+    "minutes": 37
   }
 ]

@@ -24,7 +24,7 @@
 <li><a href="#spark-dag">下一章：《Spark 崛起——内存计算与 DAG 战争》</a></li>
 </ul>
 </div>
-</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 04 <span>/ 08 · 约 39 分钟</span></p><h1>分布式大陆——Hadoop 与 MapReduce 的诞生</h1><p class="topics">HDFS · MapReduce · Shuffle · YARN</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="current" href="chapter-04.html" aria-current="page"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
+</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 04 <span>/ 08 · 约 41 分钟</span></p><h1>分布式大陆——Hadoop 与 MapReduce 的诞生</h1><p class="topics">HDFS · MapReduce · Shuffle · YARN</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="current" href="chapter-04.html" aria-current="page"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
 <ul>
 <li><a href="#tb">第一幕：一百 TB 的秘密档案</a></li>
 <li><a href="#hadoop">第二幕：Hadoop 帝国——三大军团</a></li>
@@ -136,12 +136,33 @@
 <p>而是一套由多种组件构成的大数据基础设施。</p>
 <p>帝国最重要的三大军团分别是：</p>
 <h2 id="hadoop_1">Hadoop 核心架构</h2>
-<p>HDFS：分布式文件系统</p>
-<p>负责把大文件分块并保存到多台机器</p>
-<p>YARN：集群资源管理</p>
-<p>负责资源分配、应用调度与运行管理</p>
-<p>MapReduce：分布式计算模型与执行框架</p>
-<p>负责把计算任务拆分、处理并聚合</p>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>组件</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>存储</td>
+<td>HDFS</td>
+<td>大文件分块，分散保存到多台机器</td>
+</tr>
+<tr>
+<td>资源管理</td>
+<td>YARN</td>
+<td>资源分配、应用调度与运行管理</td>
+</tr>
+<tr>
+<td>计算</td>
+<td>MapReduce</td>
+<td>拆分计算任务，处理并聚合结果</td>
+</tr>
+</tbody>
+</table>
+<p><strong>配合关系</strong>：MapReduce 读取 HDFS 中的数据；在 YARN 上运行时，由 YARN 协调其执行资源。</p>
 <p>国王问：</p>
 <p>“他们有什么关系？”</p>
 <p>架构师回答：</p>
@@ -175,23 +196,46 @@
 <p>“然后呢？”</p>
 <p>“然后，我们把这些数据块分散存储到不同的 DataNode 上。”</p>
 <h3 id="hdfs_1">HDFS 文件分块示意</h3>
-<p>一个大文件</p>
-<p>示例：512 MiB</p>
-<p>Block 0</p>
-<p>128 MiB</p>
-<p>Block 1</p>
-<p>128 MiB</p>
-<p>Block 2</p>
-<p>128 MiB</p>
-<p>Block 3</p>
-<p>128 MiB</p>
-<p>DataNode 1</p>
-<p>保存数据块副本</p>
-<p>DataNode 2</p>
-<p>保存数据块副本</p>
-<p>DataNode 3</p>
-<p>保存数据块副本</p>
-<p>逻辑示意：实际数据块放置由 HDFS 决定，并可能存在多个副本。</p>
+<figure class="concept concept-blocks"><figcaption>① 逻辑分块：512 MiB 文件 → 4 个 Block</figcaption><ol class="concept-flow"><li><strong>Block 0</strong><span>128 MiB</span></li><li><strong>Block 1</strong><span>128 MiB</span></li><li><strong>Block 2</strong><span>128 MiB</span></li><li><strong>Block 3</strong><span>128 MiB</span></li></ol><p class="concept-note">块属于同一个文件；分块大小是本例假设，不代表所有集群配置。</p></figure>
+
+<p><strong>② 副本放置：逻辑块与物理节点是两层关系。</strong></p>
+<table>
+<thead>
+<tr>
+<th>逻辑块</th>
+<th>DataNode 1</th>
+<th>DataNode 2</th>
+<th>DataNode 3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Block 0</td>
+<td>副本</td>
+<td>副本</td>
+<td>副本</td>
+</tr>
+<tr>
+<td>Block 1</td>
+<td>副本</td>
+<td>副本</td>
+<td>副本</td>
+</tr>
+<tr>
+<td>Block 2</td>
+<td>副本</td>
+<td>副本</td>
+<td>副本</td>
+</tr>
+<tr>
+<td>Block 3</td>
+<td>副本</td>
+<td>副本</td>
+<td>副本</td>
+</tr>
+</tbody>
+</table>
+<p>本表仅以三个节点、每块三副本说明存储关系；实际节点选择与机架放置由 HDFS 策略决定。<strong>分块</strong>解决文件拆分，<strong>副本</strong>解决同一块的冗余保存，两者不要混淆。</p>
 <h3 id="block_1">二、为什么 Block 要设计得比较大？</h3>
 <p>国王好奇地问：</p>
 <p>“为什么不把一 TB 文件切成几亿个极小的数据块？”</p>
@@ -233,15 +277,8 @@ Block 002
 <p>“NameNode 知道这些 Block 的位置。”</p>
 <p>“客户端先与 NameNode 交互获取所需元数据，再直接与相关 DataNode 传输文件数据。”</p>
 <h3 id="hdfs_2">HDFS 客户端读取数据</h3>
-<p>Client</p>
-<p>请求并获取 Block 位置</p>
-<p>NameNode</p>
-<p>管理元数据</p>
-<p>客户端根据位置信息直接读取 DataNode</p>
-<p>DataNode A</p>
-<p>DataNode B</p>
-<p>DataNode C</p>
-<p>读取过程中，文件数据通常不会通过 NameNode 中转。</p>
+<figure class="concept"><figcaption>元数据查询与数据读取分开进行</figcaption><ol class="concept-flow"><li><strong>1 · Client → NameNode</strong><span>请求文件的 Block 位置信息</span></li><li><strong>2 · NameNode → Client</strong><span>返回相关 DataNode 位置等元数据</span></li><li><strong>3 · Client → DataNode</strong><span>选择相应节点，直接读取数据块</span></li></ol><p class="concept-note">NameNode 管理元数据，文件内容通常不经过 NameNode 中转。</p></figure>
+
 <h3 id="fsimage-editlog">二、FsImage 与 EditLog</h3>
 <p>NameNode 还需要记住文件系统的状态。</p>
 <p>架构师解释：</p>
@@ -412,22 +449,11 @@ MySQL: 1
 <p>“并且这并不只有网络开销。”</p>
 <p>他展开 Shuffle 的详细作战地图。</p>
 <h3 id="mapreduce-shuffle">MapReduce Shuffle 过程</h3>
-<p>Mapper 输出中间 Key-Value</p>
-<p>Partition + Sort</p>
-<p>根据 Key 分区，在 Map 侧组织有序数据</p>
-<p>Spill / Merge</p>
-<p>必要时溢写磁盘，并归并中间数据</p>
-<p>Network Shuffle</p>
-<p>Reducer 获取属于自己的 Map 输出分区</p>
-<p>Merge + Group</p>
-<p>合并、排序、按 Key 分组</p>
-<p>Reduce 聚合</p>
+<figure class="concept"><figcaption>按数据处理顺序阅读</figcaption><ol class="concept-flow"><li><strong>Map 输出</strong><span>Mapper 产生中间 Key-Value</span></li><li><strong>Partition + Sort</strong><span>按 Key 分区并组织有序输出</span></li><li><strong>Spill / Merge</strong><span>必要时溢写磁盘，归并中间文件</span></li><li><strong>Network Shuffle</strong><span>Reducer 拉取属于自己的分区</span></li><li><strong>Merge + Group</strong><span>合并、排序并按 Key 分组</span></li><li><strong>Reduce</strong><span>执行聚合，输出结果</span></li></ol></figure>
+
 <p>架构师说道：</p>
 <p>“在 Hadoop MapReduce 中，Map 中间输出通常需要在本地组织并可能溢写磁盘，而 Reduce 端需要获取对应分区并进行合并与分组。”</p>
 <p>“所以 Shuffle 可能同时消耗磁盘 I/O、网络带宽、CPU 和内存。”&#x20;</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://hadoop.apache.org\&amp;sz=32">image</a></p>
-<p>MapReduce Tutorial</p>
-<p>+1</p>
 <h3 id="combiner">二、Combiner：先在本地汇总</h3>
 <p>国王忽然想到了一个办法。</p>
 <p>“假设机器 A 产生了一百万个 <code>(Java, 1)</code>。”</p>
@@ -539,8 +565,6 @@ MySQL: 1
 <p>“如果整个作业都在等待最后一个慢任务，框架可以在一定条件下启动同一任务的另一次尝试。”</p>
 <p>“谁先成功完成，就采用符合框架提交规则的结果。”</p>
 <p>“这叫推测执行（Speculative Execution）。”&#x20;</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://hadoop.apache.org\&amp;sz=32">image</a></p>
-<p>MapReduce Tutorial</p>
 <p>国王问：</p>
 <p>“那岂不是执行了两次？”</p>
 <p>“是的，所以业务代码必须注意重复执行问题。”</p>
@@ -565,26 +589,41 @@ MySQL: 1
 <h3 id="applicationmaster">ApplicationMaster：应用指挥官</h3>
 <p>负责某个应用的任务协调，并向 ResourceManager 申请资源，配合 NodeManager 启动任务。</p>
 <h3 id="yarn_1">YARN 资源管理架构</h3>
-<p>ResourceManager</p>
-<p>全局资源分配与应用管理</p>
-<p>ApplicationMaster</p>
-<p>协调当前应用并申请 Container</p>
-<p>NodeManager 1</p>
-<p>Container</p>
-<p>Task</p>
-<p>NodeManager 2</p>
-<p>Container</p>
-<p>Task</p>
-<p>NodeManager 3</p>
-<p>Container</p>
-<p>Task</p>
-<p>简化的逻辑结构。实际 ResourceManager 也会与各 NodeManager 交互，ApplicationMaster 本身同样运行于获得的资源容器中。</p>
+<table>
+<thead>
+<tr>
+<th>范围</th>
+<th>组件</th>
+<th>管理对象与协作关系</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>集群</td>
+<td>ResourceManager</td>
+<td>统一资源调度，与各 NodeManager 通信</td>
+</tr>
+<tr>
+<td>单个应用</td>
+<td>ApplicationMaster</td>
+<td>申请 Container，协调当前应用任务</td>
+</tr>
+<tr>
+<td>单个节点</td>
+<td>NodeManager 1 / 2 / 3</td>
+<td>管理各自节点上的 Container 与任务</td>
+</tr>
+<tr>
+<td>分配的运行资源</td>
+<td>Container</td>
+<td>应用任务获得的资源分配与执行环境</td>
+</tr>
+</tbody>
+</table>
+<p><strong>层次关系</strong>：集群包含多个节点；节点可运行多个 Container；应用的 ApplicationMaster 协调其任务使用分配到的资源。此处为逻辑结构，不代表每个节点只能运行一个任务。</p>
 <p>架构师补充：</p>
 <p>“YARN 将全局资源管理与每个应用的任务管理分开，使不同计算框架可以共享集群资源。”</p>
 <p>“因此，YARN 并不是只能运行 MapReduce。”&#x20;</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://hadoop.apache.org\&amp;sz=32">image</a></p>
-<p>Apache Hadoop YARN</p>
-<p>+1</p>
 <p>国王问：</p>
 <p>“这是不是和 Kubernetes 很像？”</p>
 <p>“在资源调度、容器化工作负载管理等方面存在一定相似性。”</p>

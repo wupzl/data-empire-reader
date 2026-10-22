@@ -9,3 +9,15 @@ article h3{margin-top:2.2em}article li{margin:.4em 0}article th{background:var(-
 article math[display=block]{background:var(--soft);border-radius:5px;padding:22px 15px;line-height:1.8}
 article blockquote{line-height:1.9}.table-wrap{border-radius:5px}article pre:focus-visible{outline:2px solid var(--accent)}
 @media(max-width:700px){article pre{font-size:13px;line-height:1.9}article th,article td{padding:10px;min-width:100px}}
+
+/* Semantic chapter diagrams: ordered stages retain relationships on mobile. */
+.concept{margin:28px 0;padding:22px;background:var(--paper);border:1px solid var(--line);border-radius:8px}
+.concept figcaption{font-size:.9em;font-weight:650;margin-bottom:18px;line-height:1.8;color:var(--accent)}
+article .concept-flow{list-style:none;padding:0;margin:0;display:grid;gap:22px;counter-reset:stage}
+.concept-flow>li{position:relative;border:1px solid var(--line);border-left:3px solid var(--accent);padding:13px 17px;margin:0;background:var(--bg);font-size:.83em}
+.concept-flow>li+li:before{content:'↓';position:absolute;top:-25px;left:20px;color:var(--accent);line-height:22px}
+.concept-flow strong,.concept-flow span{display:block}.concept-flow span{color:var(--muted);font-size:.94em;margin-top:4px}
+article .concept-note{font-size:.75em;color:var(--muted);line-height:1.9;margin:17px 0 0}
+@media(max-width:700px){.concept{margin:22px 0;padding:16px}.concept-flow>li{padding:11px 13px}}
+
+article .concept-blocks .concept-flow{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.concept-blocks .concept-flow>li+li:before{content:none}@media(max-width:700px){article .concept-blocks .concept-flow{grid-template-columns:repeat(2,minmax(0,1fr))}}

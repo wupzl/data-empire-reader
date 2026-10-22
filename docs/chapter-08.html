@@ -4,10 +4,6 @@
 <div class="reader-layout"><aside class="sidebar"><p class="eyebrow">THE EMPIRE’S JOURNEY</p><nav aria-label="全书章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="current" href="chapter-08.html" aria-current="page"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><details class="local-toc" open><summary>本章线索</summary><div class="toc">
 <ul>
 <li><a href="#_1">第一幕：千万人的邀请函</a></li>
-<li><a href="#1000">1,000万</a></li>
-<li><a href="#100">100万</a></li>
-<li><a href="#10s">10万/s</a></li>
-<li><a href="#20s">20万/s</a></li>
 <li><a href="#api_1">API 容量规划实验室</a></li>
 <li><a href="#nginx">第二幕：第一道城墙——Nginx 与网关的分工</a></li>
 <li><a href="#qps">第三幕：百万长连接——为什么十万 QPS 不等于百万线程？</a></li>
@@ -26,13 +22,9 @@
 <li><a href="#_44">待续 · 第九章预告：数据仓库之城——从混乱日志到可信指标</a></li>
 </ul>
 </div>
-</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 08 <span>/ 08 · 约 35 分钟</span></p><h1>千万级帝国——从零设计真正的高并发直播系统</h1><p class="topics">容量规划 · 长连接 · 高可用 · 可观测性</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="current" href="chapter-08.html" aria-current="page"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
+</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 08 <span>/ 08 · 约 37 分钟</span></p><h1>千万级帝国——从零设计真正的高并发直播系统</h1><p class="topics">容量规划 · 长连接 · 高可用 · 可观测性</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="current" href="chapter-08.html" aria-current="page"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
 <ul>
 <li><a href="#_1">第一幕：千万人的邀请函</a></li>
-<li><a href="#1000">1,000万</a></li>
-<li><a href="#100">100万</a></li>
-<li><a href="#10s">10万/s</a></li>
-<li><a href="#20s">20万/s</a></li>
 <li><a href="#api_1">API 容量规划实验室</a></li>
 <li><a href="#nginx">第二幕：第一道城墙——Nginx 与网关的分工</a></li>
 <li><a href="#qps">第三幕：百万长连接——为什么十万 QPS 不等于百万线程？</a></li>
@@ -89,19 +81,38 @@
 <p>“千万 DAU 不等于千万并发，百万在线也不等于百万 QPS。”</p>
 <p>“在确定系统架构之前，我们必须先知道流量从哪里来、请求有哪些类型，以及每种服务的性能目标。”</p>
 <h3 id="_2">一、四个不能混淆的指标</h3>
-<p>日活跃用户 DAU</p>
-<h2 id="1000">1,000万</h2>
-<p>一天内访问过平台的去重用户数</p>
-<p>峰值在线连接</p>
-<h2 id="100">100万</h2>
-<p>某时刻保持在线的用户或连接</p>
-<p>峰值 API 吞吐</p>
-<h2 id="10s">10万/s</h2>
-<p>需要实际处理的接口请求速率</p>
-<p>业务事件吞吐</p>
-<h2 id="20s">20万/s</h2>
-<p>点赞、评论、曝光、支付等事件总量</p>
-<p>数字均为本章虚构的系统设计假设，并非某一真实直播平台的生产数据。</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>本章假设</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>日活跃用户 DAU</td>
+<td>1,000 万</td>
+<td>一天内访问过平台的去重用户数</td>
+</tr>
+<tr>
+<td>峰值在线连接</td>
+<td>100 万</td>
+<td>某时刻保持在线的用户或连接</td>
+</tr>
+<tr>
+<td>峰值 API 吞吐</td>
+<td>10 万/秒</td>
+<td>需要实际处理的接口请求速率</td>
+</tr>
+<tr>
+<td>业务事件吞吐</td>
+<td>20 万/秒</td>
+<td>点赞、评论、曝光、支付等事件总量</td>
+</tr>
+</tbody>
+</table>
+<p>这些是不同统计口径，不能直接互换。数字均为本章虚构的系统设计假设，并非真实平台生产数据。</p>
 <p>架构师解释：</p>
 <p>“一个用户可以在直播间停留两小时。”</p>
 <p>“期间 WebSocket 一直保持连接，但不代表他每秒都在发送 HTTP 请求。”</p>
@@ -280,19 +291,8 @@ int data = in.read();
 <p>平均每台管理一万条连接。</p>
 <p>当某个直播间出现新弹幕时，可以将弹幕事件发布到房间消息分发层，再由持有相应连接的网关实例执行本地广播。</p>
 <h3 id="_11">直播间消息广播架构</h3>
-<p>用户发送弹幕</p>
-<p>经 WebSocket Gateway 完成鉴权与校验</p>
-<p>直播间消息服务</p>
-<p>生成消息 ID、房间序号与分发事件</p>
-<p>房间消息分发层</p>
-<p>向订阅该直播间的网关实例分发</p>
-<p>Gateway 1</p>
-<p>本地连接广播</p>
-<p>Gateway 2</p>
-<p>本地连接广播</p>
-<p>Gateway 3</p>
-<p>本地连接广播</p>
-<p>各网关只向自己管理的目标房间连接发送消息；实际系统还需维护房间订阅与实例分布信息。</p>
+<figure class="concept"><figcaption>先分发到网关，再在各网关本地广播</figcaption><ol class="concept-flow"><li><strong>用户 → WebSocket Gateway</strong><span>完成鉴权与消息校验</span></li><li><strong>直播间消息服务</strong><span>生成消息 ID、房间序号与分发事件</span></li><li><strong>房间消息分发层</strong><span>向订阅该直播间的 Gateway 1 / 2 / 3 分发</span></li><li><strong>各 Gateway → 本地连接</strong><span>只向自己管理的目标房间连接发送消息</span></li></ol><p class="concept-note">实际系统还需维护房间订阅与实例分布信息。</p></figure>
+
 <h3 id="_12">二、消息广播成本</h3>
 <p>架构师拿出一份新的计算。</p>
 <p>“假设一条弹幕经过协议封装后，平均向每个观看用户发送 200 字节。”</p>
@@ -406,8 +406,6 @@ MySQL 压力急剧上升
 <p>Flink 需要在故障恢复时重放仍被保留的事件。</p>
 <p>“Kafka 的分区日志、保留策略和独立消费组适合许多此类场景。”</p>
 <p>Kafka 的分区日志和消费组模型，使同一个 Topic 可以被不同的逻辑订阅者独立读取。</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://kafka.apache.org\&amp;sz=32">image</a></p>
-<p>Apache Kafka</p>
 <h3 id="_19">三、不要机械地两个都上</h3>
 <p>国王问：</p>
 <p>“那是不是所有大型项目都需要同时使用 RabbitMQ 和 Kafka？”</p>
@@ -495,16 +493,8 @@ MySQL 创建领取记录
 <p>这一次，架构师不再让 ClickHouse 或 MySQL 不断重新扫描全部订单。</p>
 <p>他建立了一条数据管道。</p>
 <h2 id="_24">交易与实时分析的双链路</h2>
-<p>Spring Boot 支付服务</p>
-<p>验证支付结果、完成幂等状态转换</p>
-<p>MySQL 交易库 + Outbox</p>
-<p>CDC / 可靠事件发布 → Kafka</p>
-<p>Flink：去重、窗口、状态、聚合</p>
-<p>Redis</p>
-<p>最新统计快照</p>
-<p>ClickHouse</p>
-<p>历史趋势分析</p>
-<p>SSE / WebSocket → 运营看板</p>
+<figure class="concept"><figcaption>交易事实与派生分析分工</figcaption><ol class="concept-flow"><li><strong>Spring Boot 支付服务</strong><span>验证支付结果，完成幂等状态转换</span></li><li><strong>MySQL 交易库 + Outbox</strong><span>持久化权威交易事实与待发布事件</span></li><li><strong>CDC / 可靠事件发布 → Kafka</strong><span>将交易事实转成可消费的事件流</span></li><li><strong>Flink</strong><span>去重、窗口、状态与聚合</span></li><li><strong>Redis / ClickHouse</strong><span>分别提供最新统计快照与历史趋势分析</span></li><li><strong>SSE / WebSocket → 运营看板</strong><span>异步展示派生统计结果</span></li></ol><p class="concept-note">看板的短暂延迟，不应改变交易库对支付结果的权威判断。</p></figure>
+
 <h3 id="_25">一、为什么不能把交易正确性交给实时看板？</h3>
 <p>国王问：</p>
 <p>“Flink 已经统计了成交额，为什么还需要 MySQL 交易库？”</p>
@@ -585,9 +575,6 @@ Java 实例集群           Java 实例集群
 <p>“是的，但 HPA 通过周期性控制循环，根据资源或业务指标调整工作负载副本数量。”</p>
 <p>“从发现负载变化，到新实例启动、预热、就绪、实际承接流量，需要一定过程。”</p>
 <p>“对于已知的大促，往往还需要提前容量规划与预扩容，而不是全部依赖流量到来后的自动伸缩。”&#x20;</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://kubernetes.io\&amp;sz=32">image</a></p>
-<p>Kubernetes</p>
-<p>+1</p>
 <h2 id="_32">第十幕：可观测性——为什么系统没有报警，却已经影响用户？</h2>
 <p>大促结束前，国王看到监控大屏全部显示绿色。</p>
 <p>CPU 正常。</p>
@@ -675,26 +662,42 @@ MySQL
 <p>“而是你能否从需求推导出架构，再说明关键权衡。”</p>
 <h3 id="_35">一场面试，应该怎样分配时间？</h3>
 <h3 id="40">40 分钟系统设计作答节奏</h3>
-<p>01</p>
-<p>明确需求与 SLA</p>
-<p>0–5 分钟</p>
-<p>业务边界、规模、延迟、一致性</p>
-<p>02</p>
-<p>容量估算</p>
-<p>5–10 分钟</p>
-<p>QPS、在线连接、读写比例与资源</p>
-<p>03</p>
-<p>整体架构</p>
-<p>10–20 分钟</p>
-<p>网关、服务、缓存、数据库、消息</p>
-<p>04</p>
-<p>核心难点</p>
-<p>20–32 分钟</p>
-<p>广播、秒杀、幂等、扩容、一致性</p>
-<p>05</p>
-<p>高可用与验证</p>
-<p>32–40 分钟</p>
-<p>故障恢复、监控、压测与权衡</p>
+<table>
+<thead>
+<tr>
+<th>时间</th>
+<th>阶段</th>
+<th>需要讲清楚的内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0–5 分钟</td>
+<td>明确需求与 SLA</td>
+<td>业务边界、规模、延迟、一致性</td>
+</tr>
+<tr>
+<td>5–10 分钟</td>
+<td>容量估算</td>
+<td>QPS、在线连接、读写比例与资源</td>
+</tr>
+<tr>
+<td>10–20 分钟</td>
+<td>整体架构</td>
+<td>网关、服务、缓存、数据库、消息</td>
+</tr>
+<tr>
+<td>20–32 分钟</td>
+<td>核心难点</td>
+<td>广播、秒杀、幂等、扩容、一致性</td>
+</tr>
+<tr>
+<td>32–40 分钟</td>
+<td>高可用与验证</td>
+<td>故障恢复、监控、压测与权衡</td>
+</tr>
+</tbody>
+</table>
 <p>架构师说道：</p>
 <p>“不要一开始就画几十个微服务。”</p>
 <p>“先说明最重要的业务链路。”</p>

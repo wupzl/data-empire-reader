@@ -18,7 +18,7 @@
 <li><a href="#kafka-flink">下一章：《实时之河——Kafka 与 Flink 的崛起》</a></li>
 </ul>
 </div>
-</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 05 <span>/ 08 · 约 30 分钟</span></p><h1>Spark 崛起——内存计算与 DAG 战争</h1><p class="topics">RDD · DAG · Spark SQL · 执行计划</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="current" href="chapter-05.html" aria-current="page"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
+</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 05 <span>/ 08 · 约 31 分钟</span></p><h1>Spark 崛起——内存计算与 DAG 战争</h1><p class="topics">RDD · DAG · Spark SQL · 执行计划</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="current" href="chapter-05.html" aria-current="page"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
 <ul>
 <li><a href="#_1">第一幕：七十二次计算，帝国等待了三天</a></li>
 <li><a href="#rdd">第二幕：RDD——不再只是一个普通数组</a></li>
@@ -352,8 +352,6 @@ Stage 1：
 </table>
 <p>“具体支持哪些存储级别，以及默认行为，取决于 Spark API 和版本。”</p>
 <p>“例如 PySpark RDD 与 DataFrame 的默认持久化行为不能不加区分地混为一谈。”&#x20;</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://spark.apache.org\&amp;sz=32">image</a></p>
-<p>Spark 4.2.0 Documentation</p>
 <p>国王问：</p>
 <p>“那我把所有 DataFrame 都缓存，不就能加速了吗？”</p>
 <p>Spark 摇头。</p>
@@ -397,16 +395,8 @@ Stage 1：
 <p>Catalyst 是 Spark SQL 的查询优化框架。</p>
 <p>它会参与解析 SQL、分析语义、优化逻辑计划和选择物理执行方案。</p>
 <h3 id="spark-sql">Spark SQL 查询计划演化</h3>
-<p>SQL / DataFrame</p>
-<p>用户描述计算需求</p>
-<p>解析与分析</p>
-<p>生成并校验逻辑计划</p>
-<p>逻辑优化</p>
-<p>过滤下推、列裁剪等规则</p>
-<p>物理计划</p>
-<p>选择 Join、聚合等执行方式</p>
-<p>执行</p>
-<p>生成任务并在集群中运行</p>
+<figure class="concept"><figcaption>从声明需求到集群任务</figcaption><ol class="concept-flow"><li><strong>SQL / DataFrame</strong><span>用户描述需要的计算结果</span></li><li><strong>解析与分析</strong><span>生成并校验逻辑计划</span></li><li><strong>逻辑优化</strong><span>过滤下推、列裁剪等规则</span></li><li><strong>物理计划</strong><span>选择 Join、聚合等执行方式</span></li><li><strong>执行</strong><span>生成任务，在集群中运行</span></li></ol></figure>
+
 <h3 id="predicate-pushdown">二、谓词下推 Predicate Pushdown</h3>
 <p>假设我们有一百 TB 的 Parquet 文件。</p>
 <p>但只需要查询某个月的订单。</p>
@@ -461,17 +451,34 @@ Stage 1：
 <p>Spark 可以考虑把小表广播给参与计算的 Executor。</p>
 <p>“这样，大表不必仅仅为了这个 Join 而全部按照连接键重新洗牌。”</p>
 <h3 id="broadcast-join">Broadcast Join 简化结构</h3>
-<p>小表：用户维度数据</p>
-<p>广播到执行节点</p>
-<p>Executor 1</p>
-<p>大表分区</p>
-<p>小表副本</p>
-<p>Executor 2</p>
-<p>大表分区</p>
-<p>小表副本</p>
-<p>Executor 3</p>
-<p>大表分区</p>
-<p>小表副本</p>
+<figure class="concept"><figcaption>小表分发到执行节点</figcaption><ol class="concept-flow"><li><strong>小表：用户维度数据</strong><span>广播到参与计算的执行节点</span></li><li><strong>Executor 1 / 2 / 3</strong><span>每个节点持有小表副本，与自己的大表分区关联</span></li></ol><p class="concept-note">大表分区分散处理，小表副本重复保存；广播并不意味着没有网络与内存成本。</p></figure>
+
+<table>
+<thead>
+<tr>
+<th>执行节点</th>
+<th>大表数据</th>
+<th>小表数据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Executor 1</td>
+<td>本节点处理的分区</td>
+<td>广播副本</td>
+</tr>
+<tr>
+<td>Executor 2</td>
+<td>本节点处理的分区</td>
+<td>广播副本</td>
+</tr>
+<tr>
+<td>Executor 3</td>
+<td>本节点处理的分区</td>
+<td>广播副本</td>
+</tr>
+</tbody>
+</table>
 <p>“但广播小表也消耗 Driver、网络和 Executor 内存资源。”</p>
 <p>“如果小表并不小，强行广播可能造成内存压力甚至任务失败。”</p>
 <h3 id="sort-merge-join">二、Sort Merge Join：双方重新分区并排序</h3>
@@ -499,9 +506,6 @@ Stage 1：
 <li>对支持的倾斜 Join 场景进行优化。</li>
 </ul>
 <p>Spark 相关优化依赖准确的统计信息、运行时数据与具体配置；即使提供了 Join Hint，也不能保证所有情况下都采用指定策略。</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://spark.apache.org\&amp;sz=32">image</a></p>
-<p>Spark 4.2.0 Documentation</p>
-<p>+1</p>
 <h2 id="_6">第八幕：数据倾斜再现——最强大的计算军团，也无法逃脱热点</h2>
 <p>战争持续了数日。</p>
 <p>Spark 帝国的计算节点大部分已经完成任务。</p>

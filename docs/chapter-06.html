@@ -4,9 +4,6 @@
 <div class="reader-layout"><aside class="sidebar"><p class="eyebrow">THE EMPIRE’S JOURNEY</p><nav aria-label="全书章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="current" href="chapter-06.html" aria-current="page"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><details class="local-toc" open><summary>本章线索</summary><div class="toc">
 <ul>
 <li><a href="#_1">第一幕：直播帝国的崩溃之夜</a></li>
-<li><a href="#8625">¥8,625万</a></li>
-<li><a href="#3200s">3,200/s</a></li>
-<li><a href="#45s">45s</a></li>
 <li><a href="#kafka">第二幕：Kafka——一条能够保存历史的消息长河</a></li>
 <li><a href="#consumer-group">第三幕：Consumer Group——为什么增加消费者不一定提升吞吐量？</a></li>
 <li><a href="#leaderfollower-isrkafka-broker">第四幕：Leader、Follower 与 ISR——Kafka 如何应对 Broker 宕机？</a></li>
@@ -24,12 +21,9 @@
 <li><a href="#_17">下一章：《背压风暴——千万级实时数据系统的生死线》</a></li>
 </ul>
 </div>
-</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 06 <span>/ 08 · 约 35 分钟</span></p><h1>实时之河——Kafka 与 Flink 的崛起</h1><p class="topics">Kafka · Flink · 事件时间 · Watermark</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="current" href="chapter-06.html" aria-current="page"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
+</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 06 <span>/ 08 · 约 36 分钟</span></p><h1>实时之河——Kafka 与 Flink 的崛起</h1><p class="topics">Kafka · Flink · 事件时间 · Watermark</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="current" href="chapter-06.html" aria-current="page"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
 <ul>
 <li><a href="#_1">第一幕：直播帝国的崩溃之夜</a></li>
-<li><a href="#8625">¥8,625万</a></li>
-<li><a href="#3200s">3,200/s</a></li>
-<li><a href="#45s">45s</a></li>
 <li><a href="#kafka">第二幕：Kafka——一条能够保存历史的消息长河</a></li>
 <li><a href="#consumer-group">第三幕：Consumer Group——为什么增加消费者不一定提升吞吐量？</a></li>
 <li><a href="#leaderfollower-isrkafka-broker">第四幕：Leader、Follower 与 ISR——Kafka 如何应对 Broker 宕机？</a></li>
@@ -63,16 +57,33 @@
 <p>无数点赞、评论、商品点击、支付成功事件，源源不断地涌向服务器。</p>
 <p>国王 Java 坐在监控大殿中。</p>
 <p>屏幕上显示着直播间实时成交额。</p>
-<p>直播间实时监控 · 模拟</p>
-<p>直播中</p>
-<p>当前在线人数</p>
-<p><strong>1,024,832</strong></p>
-<p>累计成交额</p>
-<h2 id="8625">¥8,625万</h2>
-<p>支付事件速率</p>
-<h2 id="3200s">3,200/s</h2>
-<p>数据更新延迟</p>
-<h2 id="45s">45s</h2>
+<p><strong>直播间实时监控 · 模拟 / 直播中</strong></p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>当前读数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>当前在线人数</td>
+<td>1,024,832</td>
+</tr>
+<tr>
+<td>累计成交额</td>
+<td>¥8,625 万</td>
+</tr>
+<tr>
+<td>支付事件速率</td>
+<td>3,200 / 秒</td>
+</tr>
+<tr>
+<td>数据更新延迟</td>
+<td>45 秒</td>
+</tr>
+</tbody>
+</table>
 <p>虚构业务数据，用于故事中的系统设计演示。</p>
 <p>突然。</p>
 <p>屏幕上的成交金额停止变化。</p>
@@ -187,9 +198,6 @@ user-behavior-events
 <p>Kafka 说道：</p>
 <p>“陛下，请记住第一条法则。”</p>
 <p>Kafka 保证的是单个 Partition 内的日志顺序，而不是整个 Topic 的全局顺序。&#x20;</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://kafka.apache.org\&amp;sz=32">image</a></p>
-<p>Apache Kafka</p>
-<p>+1</p>
 <p>国王问：</p>
 <p>“那如果订单创建事件与支付事件需要保持顺序呢？”</p>
 <p>“可以让与同一个订单相关的事件使用相同的消息 Key，例如 <code>orderId</code>，通过一致的分区规则尽量进入同一个 Partition。”</p>
@@ -287,9 +295,6 @@ Consumer C → Partition 2
 <p>“正是。”</p>
 <p>“分布式系统中，消费进度与业务结果的一致性是一个非常重要的问题。”</p>
 <p>Kafka 的消费者组及分区分配机制可以参见官方文档。</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://downloads.apache.org\&amp;sz=32">image</a></p>
-<p>downloads.apache.org</p>
-<p>+1</p>
 <h2 id="leaderfollower-isrkafka-broker">第四幕：Leader、Follower 与 ISR——Kafka 如何应对 Broker 宕机？</h2>
 <p>当天夜里。</p>
 <p>一台 Kafka Broker 突然失去连接。</p>
@@ -479,21 +484,37 @@ Watermark：约 20:05:00
 <p>可以形成两个会话窗口。</p>
 <p>“这种模型常用于用户行为分析。”</p>
 <h3 id="_5">三种窗口的直观区别</h3>
-<p>滚动窗口</p>
-<p>0–5m</p>
-<p>5–10m</p>
-<p>10–15m</p>
-<p>15–20m</p>
-<p>窗口不重叠</p>
-<p>滑动窗口</p>
-<p>0–5m</p>
-<p>1–6m</p>
-<p>2–7m</p>
-<p>窗口可以重叠，事件可能被多个窗口使用</p>
-<p>会话窗口</p>
-<p>会话 A</p>
-<p>会话 B</p>
-<p>根据连续事件之间的空闲间隔划分</p>
+<table>
+<thead>
+<tr>
+<th>窗口</th>
+<th>时间范围示例</th>
+<th>划分方式</th>
+<th>是否重叠</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>滚动窗口</td>
+<td>[0,5)、[5,10)、[10,15) 分钟</td>
+<td>固定大小，连续划分</td>
+<td>不重叠</td>
+</tr>
+<tr>
+<td>滑动窗口</td>
+<td>[0,5)、[1,6)、[2,7) 分钟</td>
+<td>本例大小 5 分钟、步长 1 分钟</td>
+<td>可以重叠，同一事件可参与多个窗口</td>
+</tr>
+<tr>
+<td>会话窗口</td>
+<td>会话 A、会话 B</td>
+<td>按事件之间的空闲间隔划分</td>
+<td>由会话间隔决定边界</td>
+</tr>
+</tbody>
+</table>
+<p><strong>读法</strong>：<code>[0,5)</code> 包含起点，不包含终点。会话窗口没有固定的五分钟边界。</p>
 <h3 id="_6">四、迟到事件如何处理？</h3>
 <p>国王问：</p>
 <p>“假设 Watermark 已经推进到窗口结束时间，但又来了一条更早的事件。”</p>
@@ -551,8 +572,6 @@ user_1003 → failCount = 1
 <p>“这是一个真实的问题。”</p>
 <p>“因此，状态规模、状态后端、TTL、状态清理，以及 Checkpoint 成本，都是重要的工程设计因素。”</p>
 <p>“一些状态后端能够结合磁盘和内存管理大型状态，但不会让存储和恢复成本凭空消失。”&#x20;</p>
-<p><a href="https://www.google.com/s2/favicons?domain=https://flink.apache.org\&amp;sz=32">image</a></p>
-<p>Apache Flink</p>
 <h2 id="checkpoint">第九幕：Checkpoint——计算到一半，机器突然宕机</h2>
 <p>晚上九点。</p>
 <p>系统运行正常。</p>
@@ -695,20 +714,8 @@ user_1003 → failCount = 1
 <p>“不能把浏览器随意上报的‘支付成功’当作最终支付事实。”</p>
 <h3 id="_12">二、完整架构</h3>
 <h2 id="_13">直播实时数据系统</h2>
-<p>Spring Boot 订单 / 支付服务</p>
-<p>校验支付结果并更新交易状态</p>
-<p>MySQL + Outbox</p>
-<p>业务状态与待发布事件在同一事务内持久化</p>
-<p>可靠发布 / CDC</p>
-<p>Kafka：payment-events</p>
-<p>按业务 Key 分区、保存并分发事件</p>
-<p>Flink</p>
-<p>去重、Event Time、Watermark、窗口聚合与状态恢复</p>
-<p>Redis</p>
-<p>最新看板数据</p>
-<p>ClickHouse</p>
-<p>历史分析与报表</p>
-<p>Java SSE / WebSocket → Vue3 实时大屏</p>
+<figure class="concept"><figcaption>交易事实 → 可靠事件 → 实时分析</figcaption><ol class="concept-flow"><li><strong>Spring Boot 订单 / 支付服务</strong><span>校验支付结果，更新交易状态</span></li><li><strong>MySQL + Outbox</strong><span>同一事务持久化业务状态与待发布事件</span></li><li><strong>可靠发布 / CDC → Kafka</strong><span>按业务 Key 分区，保存并分发 payment-events</span></li><li><strong>Flink</strong><span>去重、事件时间、Watermark、窗口与状态恢复</span></li><li><strong>Redis / ClickHouse</strong><span>分别服务最新看板数据与历史分析报表</span></li><li><strong>Java SSE / WebSocket → Vue3 大屏</strong><span>将统计结果推送给展示层</span></li></ol></figure>
+
 <h3 id="spring-boot">三、Spring Boot 业务事务</h3>
 <p>架构师说道：</p>
 <p>“支付状态更新与 Outbox 事件写入，应该处于同一数据库事务内。”</p>
