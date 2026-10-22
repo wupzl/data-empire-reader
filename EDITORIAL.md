@@ -1,0 +1,43 @@
+# 内容整理与技术校正
+
+本项目是一部持续连载的小说式技术读物。现有八章正文；第九章《数据仓库之城——从混乱日志到可信指标》仅有原稿预告，尚未发布。
+
+## 原稿与维护入口
+
+`source/data-empire-original.md` 完整保存用户提供的原稿，不覆盖、不补写结局。`chapters/01.md` 至 `08.md` 为整理后的维护版本。日常修改章节后运行 `python build.py`；不必重新导入原稿。
+
+保留故事、代码、技术论证、现有章末预告与图片来源。清除独立的“下一章。”对话残留、复制的站点 favicon 徽标；修复标题层级、公式转义和复制出的交互控件文本。技术架构示意保留为本地正文代码块，不依赖远程图片服务。外部场景插图保留原链接、来源和失败提示。
+
+## 按章节校正与澄清
+
+| 章节 | 整理与技术说明 |
+| --- | --- |
+| 1 | 在阅读提示中明确利特尔法则的稳态条件与统计边界，区分在途请求数与线程数；补全可调 QPS、平均响应时间的交互。 |
+| 2 | 明确 Lua 原子性是命令不被穿插，不代表错误回滚或跨系统事务；重建非原子库存扣减与原子检查扣减的逐步对比；令牌桶明确为手动补充模型。 |
+| 3 | 深分页显示 OFFSET 加页大小的处理量；游标读取页大小之外仍有索引定位等成本，不将记录数称为实测耗时。分片使用大整数运算，避免 JavaScript 大 ID 精度丢失。 |
+| 4 | 明确热点 80% 时热点 Reducer 为 82%、其余各 2% 的前提：剩余记录分配给全部十个 Reducer；WordCount 使用空白分词、区分大小写。 |
+| 5 | 提示 Spark 并非要求全部数据驻留内存；保留执行计划与磁盘溢写讨论。 |
+| 6 | Watermark 教学模型明确秒级近似、单输入和零 allowed lateness；按窗口关闭判断 [0,10) 窗口是否接受后到事件，避免把一切早于 Watermark 的事件都当作必须丢弃。 |
+| 7 | Kafka Lag 已为零时清空时间为零；有积压且消费能力不高于生产速率时显示无法清空，不输出负时间或除零。 |
+| 8 | API 容量公式向上取整，单实例吞吐与负载比例不得为零；保留虚构验收报告的说明，末章导航标注待续。 |
+
+上述说明用于限定模型的适用条件，不声称完成真实分布式系统压测。正文中的 Java、SQL、Lua 与流处理代码为讲解片段，本网站不在浏览器内执行这些服务端代码。
+
+## 面试题卡补充
+
+原稿复制结果只留下每组当前可见的一道题，其他题卡与多数答案缺失。本次保留七组原问题，并依据各章主题补充为 62 道可翻页、可展开答案的题卡；题卡中标注补充来源，不将补充内容冒充原稿。
+
+## 官方参考
+
+- [Redis Lua 原子执行语义](https://redis.io/docs/latest/develop/programmability/eval-intro/)
+- [Redis Lua 错误与回滚说明](https://redis.io/docs/latest/develop/programmability/redis-lua-api/)
+- [MySQL LIMIT 优化](https://dev.mysql.com/doc/refman/8.4/en/limit-optimization.html)
+- [Flink Watermark 生成、多输入与空闲输入](https://nightlies.apache.org/flink/flink-docs-stable/docs/dev/datastream/event-time/generating_watermarks/)
+- [Flink 窗口生命周期与迟到数据](https://nightlies.apache.org/flink/flink-docs-stable/docs/dev/datastream/operators/windows/)
+- [Spark RDD 缓存与持久化](https://spark.apache.org/docs/latest/rdd-programming-guide.html)
+
+## 阅读与隐私
+
+无需账号。阅读位置、字号、主题只保存在当前浏览器，不跨设备同步。全文搜索、公式、代码高亮、交互脚本均使用本地静态资源。只有保留的外部场景插图可能向图片服务发起网络请求；失败不影响正文。
+
+界面与阅读功能沿用同一作者的 PyTorch 阅读项目。KaTeX 的上游许可证保存在 `vendor/KaTeX-LICENSE.txt`。没有为原创正文或项目整体另行指定开源许可证。

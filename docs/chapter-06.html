@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="description" content="数据帝国：以 Java 后端工程师的视角，在小说和交互实验中理解高并发与大数据。现有 8 章，第 9 章待续。"><title>实时之河——Kafka 与 Flink 的崛起 · 数据帝国</title><script>try{document.documentElement.dataset.theme=localStorage.getItem('de-theme')||'light';document.documentElement.style.setProperty('--reader-size',Math.max(14,Math.min(26,Number(localStorage.getItem('de-size'))||18))+'px')}catch(e){}</script><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="shelf-nav.css"><link rel="stylesheet" href="labs.css"><script src="app.js" defer></script><script src="labs.js" defer></script><script src="quizzes.js" defer></script></head>
+<body data-chapter="6" data-count="8"><a class="skip" href="#main">跳到正文</a><div id="progress" aria-hidden="true"></div><header class="topbar"><a class="brand" href="index.html"><span class="emblem" aria-hidden="true">D<span>↗</span></span><span>数据帝国<small>THE DATA EMPIRE</small></span></a><nav class="shelf-nav" aria-label="学习项目导航"><a class="shelf-home" href="/">← 学习书架</a><details class="shelf-switch"><summary>切换项目 ▾</summary><div class="shelf-menu"><a href="/pytorch-apprentice/">PyTorch：炼金术士的学徒</a><a href="/ai-era-reader/">AI 纪元</a><a href="/data-empire-reader/" aria-current="true">数据帝国</a></div></details></nav><div class="controls"><button id="search-open" aria-label="搜索全书">搜索 <kbd>/</kbd></button><button id="smaller" aria-label="缩小字号">A−</button><button id="larger" aria-label="增大字号">A＋</button><button id="theme" aria-label="切换深浅色主题">◐</button></div></header>
+<div class="reader-layout"><aside class="sidebar"><p class="eyebrow">THE EMPIRE’S JOURNEY</p><nav aria-label="全书章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="current" href="chapter-06.html" aria-current="page"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><details class="local-toc" open><summary>本章线索</summary><div class="toc">
+<ul>
+<li><a href="#_1">第一幕：直播帝国的崩溃之夜</a></li>
+<li><a href="#8625">¥8,625万</a></li>
+<li><a href="#3200s">3,200/s</a></li>
+<li><a href="#45s">45s</a></li>
+<li><a href="#kafka">第二幕：Kafka——一条能够保存历史的消息长河</a></li>
+<li><a href="#consumer-group">第三幕：Consumer Group——为什么增加消费者不一定提升吞吐量？</a></li>
+<li><a href="#leaderfollower-isrkafka-broker">第四幕：Leader、Follower 与 ISR——Kafka 如何应对 Broker 宕机？</a></li>
+<li><a href="#flink">第五幕：Flink 登场——一条永不停止的计算流水线</a></li>
+<li><a href="#_3">第六幕：时间之争——一笔迟到的订单</a></li>
+<li><a href="#watermark_2">事件时间与 Watermark 模拟器</a></li>
+<li><a href="#_4">第七幕：窗口王国——无穷的数据流如何划分计算范围？</a></li>
+<li><a href="#state-flink">第八幕：State——为什么 Flink 能记住过去？</a></li>
+<li><a href="#checkpoint">第九幕：Checkpoint——计算到一半，机器突然宕机</a></li>
+<li><a href="#exactly-once">第十幕：Exactly-Once——究竟是什么只执行一次？</a></li>
+<li><a href="#gmv">第十一幕：生产环境实战——构建直播实时 GMV 系统</a></li>
+<li><a href="#_13">直播实时数据系统</a></li>
+<li><a href="#_15">第十二幕：帝国最终考核——十道高频面试题</a></li>
+<li><a href="#_16">尾声：更大的敌人——海量数据与高并发的交汇</a></li>
+<li><a href="#_17">下一章：《背压风暴——千万级实时数据系统的生死线》</a></li>
+</ul>
+</div>
+</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 06 <span>/ 08 · 约 35 分钟</span></p><h1>实时之河——Kafka 与 Flink 的崛起</h1><p class="topics">Kafka · Flink · 事件时间 · Watermark</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="current" href="chapter-06.html" aria-current="page"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
+<ul>
+<li><a href="#_1">第一幕：直播帝国的崩溃之夜</a></li>
+<li><a href="#8625">¥8,625万</a></li>
+<li><a href="#3200s">3,200/s</a></li>
+<li><a href="#45s">45s</a></li>
+<li><a href="#kafka">第二幕：Kafka——一条能够保存历史的消息长河</a></li>
+<li><a href="#consumer-group">第三幕：Consumer Group——为什么增加消费者不一定提升吞吐量？</a></li>
+<li><a href="#leaderfollower-isrkafka-broker">第四幕：Leader、Follower 与 ISR——Kafka 如何应对 Broker 宕机？</a></li>
+<li><a href="#flink">第五幕：Flink 登场——一条永不停止的计算流水线</a></li>
+<li><a href="#_3">第六幕：时间之争——一笔迟到的订单</a></li>
+<li><a href="#watermark_2">事件时间与 Watermark 模拟器</a></li>
+<li><a href="#_4">第七幕：窗口王国——无穷的数据流如何划分计算范围？</a></li>
+<li><a href="#state-flink">第八幕：State——为什么 Flink 能记住过去？</a></li>
+<li><a href="#checkpoint">第九幕：Checkpoint——计算到一半，机器突然宕机</a></li>
+<li><a href="#exactly-once">第十幕：Exactly-Once——究竟是什么只执行一次？</a></li>
+<li><a href="#gmv">第十一幕：生产环境实战——构建直播实时 GMV 系统</a></li>
+<li><a href="#_13">直播实时数据系统</a></li>
+<li><a href="#_15">第十二幕：帝国最终考核——十道高频面试题</a></li>
+<li><a href="#_16">尾声：更大的敌人——海量数据与高并发的交汇</a></li>
+<li><a href="#_17">下一章：《背压风暴——千万级实时数据系统的生死线》</a></li>
+</ul>
+</div>
+</details><article><blockquote>
+<p>阅读提示：Watermark 实验采用秒级近似模型，零 allowed lateness，关闭窗口后的事件不再更新该窗口；多输入算子的进度受活跃输入 Watermark 的最小值约束。</p>
+</blockquote>
+<p>上一章，Spark 军团凭借 RDD、DAG、Catalyst 和分布式计算能力，解决了许多复杂的海量数据分析问题。</p>
+<p>然而，数据大陆开始发生变化。</p>
+<p>过去，帝国处理的是已经存储好的历史数据。现在，每一秒都有新的交易、点击、弹幕和支付事件产生。</p>
+<p>国王 Java 终于意识到：真正困难的，不只是处理一百 TB 的历史数据，而是让一条永不停歇的数据之河，持续、正确、低延迟地流经整个帝国。</p>
+<h2 id="_1">第一幕：直播帝国的崩溃之夜</h2>
+<p>数据大陆，晚上八点。</p>
+<p>Spring 王国正在举办一场盛大的直播带货活动。</p>
+<p>一百万名观众同时在线观看。</p>
+<p>每秒数万条弹幕。</p>
+<p>每秒上千笔订单。</p>
+<p>无数点赞、评论、商品点击、支付成功事件，源源不断地涌向服务器。</p>
+<p>国王 Java 坐在监控大殿中。</p>
+<p>屏幕上显示着直播间实时成交额。</p>
+<p>直播间实时监控 · 模拟</p>
+<p>直播中</p>
+<p>当前在线人数</p>
+<p><strong>1,024,832</strong></p>
+<p>累计成交额</p>
+<h2 id="8625">¥8,625万</h2>
+<p>支付事件速率</p>
+<h2 id="3200s">3,200/s</h2>
+<p>数据更新延迟</p>
+<h2 id="45s">45s</h2>
+<p>虚构业务数据，用于故事中的系统设计演示。</p>
+<p>突然。</p>
+<p>屏幕上的成交金额停止变化。</p>
+<p>五秒。</p>
+<p>十秒。</p>
+<p>三十秒。</p>
+<p>一分钟。</p>
+<p>运营总监冲进大殿。</p>
+<p>“陛下！直播间已经成交了几千笔订单，可实时大屏仍然没有更新！”</p>
+<p>国王怒道：</p>
+<p>“MySQL 没有写入成功？”</p>
+<p>“写入成功了！”</p>
+<p>“Redis 崩溃了？”</p>
+<p>“没有！”</p>
+<p>“那为什么看板没有变化？”</p>
+<p>架构师将一条 SQL 投影在墙上。</p>
+<div class="codehilite"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="k">SUM</span><span class="p">(</span><span class="n">amount</span><span class="p">)</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">orders</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">status</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;PAID&#39;</span>
+<span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">live_room_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1001</span><span class="p">;</span>
+</code></pre></div>
+
+<p>“陛下，我们当前的方案，是让实时大屏定期查询 MySQL，重新统计直播间的成交额。”</p>
+<p>“每次都执行聚合查询？”</p>
+<p>“是的。”</p>
+<p>“而当订单量越来越大、直播间越来越多，重复统计会浪费大量数据库资源。”</p>
+<p>国王皱眉。</p>
+<p>“那我们不能只计算新产生的订单吗？”</p>
+<p>架构师眼睛一亮。</p>
+<p>“陛下，您已经触及实时计算的核心思想。”</p>
+<p>不要每次都重新扫描全部历史数据，而是让新数据持续流入计算系统，增量更新已有结果。</p>
+<p>远处，一支新的军团正在接近。</p>
+<p>他们的旗帜上刻着两个名字。</p>
+<p>Kafka。</p>
+<p>Flink。</p>
+<p><img alt="故事场景插图" src="https://images.openai.com/static-rsc-4/mY2x5PBt6s6ib2MkrmEHGwsoVD1UJgASjp01Tm9iB9HO2kEVzt9t3VlfT4lf07yDkMFClO-koffinSppOS55kVdAxxgPSSmujbDFcU3Pu0Wv6j4KdbKN3C4rEqmdgYIYc04xJaFNq-m0YWnG1J2YEAjKBOvnQtC1LuI47kGGXdI?purpose=inline" /></p>
+<p><em>图片来源：How to Use the ASP.NET Core Dependency Injection Framework | Reintech media</em></p>
+<p><a href="https://reintech.io/blog/how-to-use-aspnet-core-dependency-injection-framework?utm_source=chatgpt.com">reintech.io</a></p>
+<h2 id="kafka">第二幕：Kafka——一条能够保存历史的消息长河</h2>
+<p>国王召见了 Kafka 的统帅。</p>
+<p>“听说你也是消息队列？”</p>
+<p>Kafka 点头。</p>
+<p>“可以这样入门理解，但我更准确的定位，是一个分布式事件流平台。”</p>
+<p>国王想起了 RabbitMQ。</p>
+<p>“我们已经有 RabbitMQ 了，为什么还需要你？”</p>
+<p>Kafka 没有急着回答。</p>
+<p>而是提出了一个问题。</p>
+<p>“陛下，假设一笔支付成功事件发生了。”</p>
+<p>“订单履约系统需要知道它。”</p>
+<p>“实时成交额系统需要知道它。”</p>
+<p>“风控系统需要知道它。”</p>
+<p>“数据仓库也需要知道它。”</p>
+<p>“难道我们要让订单系统分别调用四个系统？”</p>
+<p>国王陷入沉思。</p>
+<p>“这样耦合太高。”</p>
+<p>Kafka 微微一笑。</p>
+<p>“所以，让订单系统发布事件。”</p>
+<p>“其他系统根据自己的需要消费。”</p>
+<h3 id="topic">一、Topic：为不同事件开辟河道</h3>
+<p>Kafka 在地图上画出三条河流。</p>
+<div class="codehilite"><pre><span></span><code>order-events
+payment-events
+user-behavior-events
+</code></pre></div>
+
+<p>“这叫 Topic。”</p>
+<p>“生产者向 Topic 发布消息。”</p>
+<p>“消费者订阅 Topic，读取消息。”</p>
+<p>例如支付服务生成：</p>
+<div class="codehilite"><pre><span></span><code>{
+  &quot;eventId&quot;: &quot;evt_9527&quot;,
+  &quot;orderId&quot;: 9527,
+  &quot;roomId&quot;: 1001,
+  &quot;userId&quot;: 2008,
+  &quot;amount&quot;: 199.00,
+  &quot;status&quot;: &quot;PAID&quot;,
+  &quot;eventTime&quot;: &quot;2027-01-01T20:00:01Z&quot;
+}
+</code></pre></div>
+
+<p>架构师提醒：</p>
+<p>“这里的 <code>eventTime</code> 表示业务事件发生时间。”</p>
+<p>“实际生产环境应明确时间字段的含义，以及 UTC、时区和时间单位。”</p>
+<h3 id="partition">二、Partition：将河流分成多条支流</h3>
+<p>国王问：</p>
+<p>“如果一个 Topic 每秒产生十万条消息，一台 Kafka Broker 能处理不过来怎么办？”</p>
+<p>Kafka 回答：</p>
+<p>“Topic 可以划分为多个 Partition。”</p>
+<p>“每个 Partition 是一条有序追加的日志。”</p>
+<p>“不同 Partition 可以分布在不同 Broker 上。”</p>
+<h3 id="kafka-topic-partition">Kafka Topic 与 Partition</h3>
+<p>Topic：payment-events</p>
+<p>Partition 0</p>
+<p>0</p>
+<p>1</p>
+<p>2</p>
+<p>3</p>
+<p>4</p>
+<p>Partition 1</p>
+<p>0</p>
+<p>1</p>
+<p>2</p>
+<p>3</p>
+<p>4</p>
+<p>Partition 2</p>
+<p>0</p>
+<p>1</p>
+<p>2</p>
+<p>3</p>
+<p>4</p>
+<p>数字代表各分区内的 Offset。不同 Partition 有各自独立的 Offset 序列。</p>
+<p>Kafka 说道：</p>
+<p>“陛下，请记住第一条法则。”</p>
+<p>Kafka 保证的是单个 Partition 内的日志顺序，而不是整个 Topic 的全局顺序。&#x20;</p>
+<p><a href="https://www.google.com/s2/favicons?domain=https://kafka.apache.org\&amp;sz=32">image</a></p>
+<p>Apache Kafka</p>
+<p>+1</p>
+<p>国王问：</p>
+<p>“那如果订单创建事件与支付事件需要保持顺序呢？”</p>
+<p>“可以让与同一个订单相关的事件使用相同的消息 Key，例如 <code>orderId</code>，通过一致的分区规则尽量进入同一个 Partition。”</p>
+<p>“但如果生产者重试、跨 Topic 发布、分区数量变化，或者业务处理本身存在并发，还要进一步讨论顺序保证的边界。”</p>
+<p>“不能只设置一个 Key，就宣称整个业务严格有序。”</p>
+<h3 id="offset">三、Offset：每条消息在分区中的位置</h3>
+<p>Kafka 指向河道中的标记。</p>
+<p>“每个 Partition 内，消息拥有自己的 Offset。”</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>Partition 0:
+
+Offset 0 → 支付事件 A
+Offset 1 → 支付事件 B
+Offset 2 → 支付事件 C
+Offset 3 → 支付事件 D
+</code></pre></div>
+
+<p>“Consumer 通过读取位置追踪自己的消费进度。”</p>
+<p>国王问：</p>
+<p>“如果消息已经消费过了，还能重新读取吗？”</p>
+<p>“在消息仍然保留、权限和配置允许的情况下，可以。”</p>
+<p>“Kafka 并不因为某个消费者读取了一条消息，就立刻将这条消息从 Topic 中删除。”</p>
+<p>“记录保留主要由保留时间、大小或日志压缩等策略管理。”</p>
+<p>国王眼前一亮。</p>
+<p>“也就是说，实时分析程序出现 Bug 后，我们可能重新读取历史事件，重新构建统计结果？”</p>
+<p>“正是。”</p>
+<p>“但前提是所需历史数据仍然可用。”</p>
+<h2 id="consumer-group">第三幕：Consumer Group——为什么增加消费者不一定提升吞吐量？</h2>
+<p>直播间支付事件开始不断增加。</p>
+<p>Kafka 统帅安排了三名消费者处理数据。</p>
+<div class="codehilite"><pre><span></span><code>payment-events：3 个 Partition
+
+Consumer Group：realtime-gmv
+
+Consumer A → Partition 0
+Consumer B → Partition 1
+Consumer C → Partition 2
+</code></pre></div>
+
+<p>国王问：</p>
+<p>“如果我们增加到十名消费者，是不是就能得到十倍吞吐量？”</p>
+<p>Kafka 摇头。</p>
+<p>“如果仍然只有三个 Partition，在同一个普通消费组中，不能让十个消费者分别独占十个不同分区来并行读取。”</p>
+<p>“通常最多只有三个消费者能获得这些分区，其余消费者可能空闲。”</p>
+<h3 id="consumer-group_1">一、Consumer Group 的基本规律</h3>
+<p>同一个 Consumer Group 中，一个 Partition 在同一时刻由一个组成员负责消费。</p>
+<p>但不同 Consumer Group 可以独立读取同一 Topic。</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>payment-events
+    │
+    ├── Group A：实时 GMV 统计
+    │
+    ├── Group B：风控分析
+    │
+    └── Group C：数据仓库同步
+</code></pre></div>
+
+<p>“这样，实时统计和风控可以分别维护自己的进度。”</p>
+<p>“谁快谁慢，不必使用同一个消费位置。”</p>
+<h3 id="rebalance">二、Rebalance：重新分配河道</h3>
+<p>突然，一名消费者宕机。</p>
+<p>国王问：</p>
+<p>“它负责的 Partition 怎么办？”</p>
+<p>Kafka 回答：</p>
+<p>“Consumer Group 会根据成员变化等情况重新分配 Partition。”</p>
+<p>“这叫 Rebalance。”</p>
+<p>“但 Rebalance 不是免费的。”</p>
+<p>“它可能造成短暂的消费中断、分区所有权转移，以及状态恢复等开销。”</p>
+<p>“而且如果业务提交 Offset 与实际处理结果的时机不正确，就可能出现重复处理或者丢失处理结果。”</p>
+<h3 id="offset_1">三、Offset 提交的陷阱</h3>
+<p>架构师画出两条时间线。</p>
+<p>第一条：</p>
+<div class="codehilite"><pre><span></span><code>读取消息
+   ↓
+提交 Offset
+   ↓
+处理业务
+   ↓
+程序崩溃
+</code></pre></div>
+
+<p>“如果 Offset 已经提交，但业务处理失败，恢复时可能跳过该事件。”</p>
+<p>第二条：</p>
+<div class="codehilite"><pre><span></span><code>读取消息
+   ↓
+处理业务
+   ↓
+提交 Offset
+</code></pre></div>
+
+<p>“这种顺序可以支持常见的至少一次处理设计。”</p>
+<p>“但如果业务处理成功后，Offset 尚未提交就崩溃，事件可能再次处理。”</p>
+<p>国王说道：</p>
+<p>“这与 RabbitMQ 的 ACK 问题很相似。”</p>
+<p>“正是。”</p>
+<p>“分布式系统中，消费进度与业务结果的一致性是一个非常重要的问题。”</p>
+<p>Kafka 的消费者组及分区分配机制可以参见官方文档。</p>
+<p><a href="https://www.google.com/s2/favicons?domain=https://downloads.apache.org\&amp;sz=32">image</a></p>
+<p>downloads.apache.org</p>
+<p>+1</p>
+<h2 id="leaderfollower-isrkafka-broker">第四幕：Leader、Follower 与 ISR——Kafka 如何应对 Broker 宕机？</h2>
+<p>当天夜里。</p>
+<p>一台 Kafka Broker 突然失去连接。</p>
+<p>国王猛地站起。</p>
+<p>“消息丢了吗？”</p>
+<p>Kafka 回答：</p>
+<p>“陛下，我们通常可以通过副本机制增强可用性与持久性。”</p>
+<h3 id="leader-follower">一、Leader 与 Follower</h3>
+<p>对于一个 Partition，可以设置多个副本。</p>
+<p>例如副本因子为 3：</p>
+<div class="codehilite"><pre><span></span><code>Partition 0
+
+Broker A：Leader
+Broker B：Follower
+Broker C：Follower
+</code></pre></div>
+
+<p>Leader 负责该分区的常规读写请求。</p>
+<p>Follower 从 Leader 复制日志数据。</p>
+<h3 id="isr">二、ISR 是什么？</h3>
+<p>Kafka 解释：</p>
+<p>“ISR 是 In-Sync Replicas，表示被视为保持同步状态的副本集合。”</p>
+<p>“发生 Leader 故障时，Kafka 可以从符合要求的副本中选举新的 Leader。”</p>
+<p>国王问：</p>
+<p>“只要副本因子为 3，就绝对不会丢消息吗？”</p>
+<p>“不。”</p>
+<p>“还需要考虑 Producer 的确认策略、最小同步副本要求、副本同步状态、Leader 选举策略以及底层持久化故障。”</p>
+<h3 id="_2">三、三个重要参数</h3>
+<div class="codehilite"><pre><span></span><code>acks=all
+enable.idempotence=true
+retries=2147483647
+</code></pre></div>
+
+<p>“<code>acks=all</code> 表示 Producer 要求 Leader 在满足其确认语义后再确认写入。”</p>
+<p>“<code>enable.idempotence=true</code> 可以避免生产者在支持的条件下因重试导致的重复写入。”</p>
+<p>“但幂等 Producer 不等于业务级事件永远不重复。”</p>
+<p>“如果业务应用自己产生了两次相同事件，Kafka Producer 不会凭空知道这是同一次订单支付。”</p>
+<p>Broker 端还需要合理配置：</p>
+<div class="codehilite"><pre><span></span><code>min.insync.replicas=2
+</code></pre></div>
+
+<p>“例如副本因子为 3、最小同步副本为 2，并配合 <code>acks=all</code>，可以避免只剩一个同步副本时仍按正常方式接受这类写入。”</p>
+<p>“代价是可用性与持久性之间需要权衡。”</p>
+<p>国王终于理解。</p>
+<p>副本因子决定数据复制份数的目标，确认和同步策略决定某些故障情况下如何接受写入；它们共同影响可靠性。</p>
+<h2 id="flink">第五幕：Flink 登场——一条永不停止的计算流水线</h2>
+<p>第二天，直播运营总监提出了新的要求。</p>
+<p>“我们需要每五分钟统计一次每个直播间的成交金额。”</p>
+<p>“而且不能每隔五分钟就重新扫描 MySQL。”</p>
+<p>Kafka 统帅说道：</p>
+<p>“我可以不断传递支付事件。”</p>
+<p>“但我不负责所有复杂的实时业务计算。”</p>
+<p>这时，一位身披红色斗篷的统帅走入大殿。</p>
+<p>“那么，就交给我。”</p>
+<p>“我是 Flink。”</p>
+<p><img alt="故事场景插图" src="https://images.openai.com/static-rsc-4/5iP4IvdYFhcosDIgAFBYVHYtI56V_6ipm4cP6Iywvg638jlhz2ktp8lGleM33ShQ_osoD2iHuEHjVR2_f8DohIGE_oHMiC8XCSd-Kx3TmfcL3W89KyCTNn6NIeyJxaJ98_oD8aOzFVJ-b2i4UR2rzBULoB5b_uHRlfXFWoNvvok?purpose=inline" /></p>
+<p><em>图片来源：The Art of the Aerial View: How Camera Position Shapes Storytelling with Dall-e-3</em></p>
+<p><a href="https://unimatrixz.com/topics/camera-positions/dall-e-3/dall-e-3-camera-positions-aerial-view/?utm_source=chatgpt.com">unimatrixz.com</a></p>
+<p>Flink 说道：</p>
+<p>“陛下，我负责持续处理不断到来的事件。”</p>
+<p>“可以对数据进行过滤、转换、分组、窗口聚合、状态计算和输出。”</p>
+<p>“与传统一次性批处理不同，流处理作业可以持续运行。”</p>
+<p>架构师在地图上画出：</p>
+<div class="codehilite"><pre><span></span><code>Kafka 支付事件
+      ↓
+Flink Source
+      ↓
+解析 JSON
+      ↓
+过滤支付成功事件
+      ↓
+按直播间 ID 分组
+      ↓
+5 分钟窗口聚合
+      ↓
+实时成交金额
+      ↓
+Redis / ClickHouse
+      ↓
+直播运营大屏
+</code></pre></div>
+
+<p>国王问：</p>
+<p>“Flink 与 Kafka 到底有什么区别？”</p>
+<p>Flink 回答：</p>
+<p>“Kafka 主要负责事件的持久化、传输、订阅和重放。”</p>
+<p>“Flink 主要负责持续计算。”</p>
+<p>“一个更像事件的运输与存储系统。”</p>
+<p>“另一个更像能够持续工作的计算工厂。”</p>
+<p>“但它们不是严格捆绑的关系。Flink 可以从其他数据源读取，Kafka 也可以与其他计算框架配合。”</p>
+<h2 id="_3">第六幕：时间之争——一笔迟到的订单</h2>
+<p>晚上八点零五分。</p>
+<p>直播大屏统计出：</p>
+<div class="codehilite"><pre><span></span><code>20:00—20:05
+成交金额：100000 元
+</code></pre></div>
+
+<p>国王十分满意。</p>
+<p>然而几秒后，一条支付事件到达 Flink。</p>
+<div class="codehilite"><pre><span></span><code>{
+  &quot;orderId&quot;: 9527,
+  &quot;amount&quot;: 500,
+  &quot;eventTime&quot;: &quot;20:04:58&quot;
+}
+</code></pre></div>
+
+<p>国王疑惑：</p>
+<p>“现在已经是 20:05:08。”</p>
+<p>“为什么这笔订单的时间却是 20:04:58？”</p>
+<p>架构师回答：</p>
+<p>“因为事件发生时间和事件到达计算系统的时间，不一定相同。”</p>
+<p>“网络延迟、消息积压、生产者缓冲和重试，都可能造成数据晚到。”</p>
+<h3 id="processing-time">一、Processing Time：处理时间</h3>
+<p>指的是计算算子处理事件时，所在机器的系统时间。</p>
+<p>例如：</p>
+<p>订单真正支付时间：20:04:58。</p>
+<p>事件到达 Flink：20:05:08。</p>
+<p>如果按照 Processing Time 统计，它会被归入 20:05 之后的窗口。</p>
+<h3 id="event-time">二、Event Time：事件时间</h3>
+<p>指业务事件本身携带的发生时间。</p>
+<p>如果按照 Event Time 统计，上面的订单应属于：</p>
+<p><code>20:00—20:05</code></p>
+<p>“陛下，Event Time 更适合许多需要按照真实业务发生时刻进行归属的分析。”</p>
+<p>“但代价是，我们需要处理乱序和迟到。”</p>
+<h3 id="watermark">三、Watermark：时间推进的公告</h3>
+<p>Flink 统帅取出一份告示。</p>
+<p>“我需要一种机制，帮助计算算子判断事件时间已经推进到了哪里。”</p>
+<p>“这就是 Watermark。”</p>
+<p>假设目前观察到的最大事件时间为：</p>
+<p><code>20:05:10</code></p>
+<p>我们采用最多容忍 10 秒乱序的策略。</p>
+<p>那么可以近似理解为：</p>
+<div class="codehilite"><pre><span></span><code>当前最大事件时间：20:05:10
+
+Watermark：约 20:05:00
+</code></pre></div>
+
+<p>这表示系统认为事件时间已经推进到相应位置，可以触发符合条件的事件时间计算。</p>
+<p>但 Watermark 并不能保证现实世界中再也不会出现更早的事件。</p>
+<p>它是一种时间进度声明，不是消除迟到数据的魔法。&#x20;</p>
+<h3 id="watermark_1">交互实验：体验乱序与 Watermark</h3>
+<h2 id="watermark_2">事件时间与 Watermark 模拟器</h2>
+<div class="lab" data-lab="watermark"></div>
+
+<p>国王看着事件列表。</p>
+<p>“原来即使后到达的消息，其业务时间也可能更早。”</p>
+<p>“没错。”</p>
+<p>“如果不理解时间语义，实时数据统计就很容易出现看似随机的错误。”</p>
+<h2 id="_4">第七幕：窗口王国——无穷的数据流如何划分计算范围？</h2>
+<p>国王又提出一个问题。</p>
+<p>“如果数据永远不会结束，我们怎么知道什么时候统计结果？”</p>
+<p>Flink 回答：</p>
+<p>“需要窗口。”</p>
+<h3 id="tumbling-window">一、滚动窗口 Tumbling Window</h3>
+<p>假设窗口长度为五分钟。</p>
+<div class="codehilite"><pre><span></span><code>20:00—20:05
+20:05—20:10
+20:10—20:15
+</code></pre></div>
+
+<p>每条事件按时间只属于其中一个对应的滚动窗口。</p>
+<p>适合按固定周期统计成交额。</p>
+<h3 id="sliding-window">二、滑动窗口 Sliding Window</h3>
+<p>假设窗口大小五分钟，滑动步长一分钟。</p>
+<div class="codehilite"><pre><span></span><code>20:00—20:05
+20:01—20:06
+20:02—20:07
+20:03—20:08
+</code></pre></div>
+
+<p>同一事件可能属于多个窗口。</p>
+<p>适合计算“最近五分钟”的滚动统计。</p>
+<p>但窗口重叠也可能带来更高的计算和状态开销。</p>
+<h3 id="session-window">三、会话窗口 Session Window</h3>
+<p>假设某个用户连续操作。</p>
+<p>只要两次操作之间的间隔没有超过预设阈值，就可以归为同一个会话。</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>10:00 点击
+10:01 浏览
+10:03 加购
+
+间隔较长
+
+10:30 再次访问
+</code></pre></div>
+
+<p>可以形成两个会话窗口。</p>
+<p>“这种模型常用于用户行为分析。”</p>
+<h3 id="_5">三种窗口的直观区别</h3>
+<p>滚动窗口</p>
+<p>0–5m</p>
+<p>5–10m</p>
+<p>10–15m</p>
+<p>15–20m</p>
+<p>窗口不重叠</p>
+<p>滑动窗口</p>
+<p>0–5m</p>
+<p>1–6m</p>
+<p>2–7m</p>
+<p>窗口可以重叠，事件可能被多个窗口使用</p>
+<p>会话窗口</p>
+<p>会话 A</p>
+<p>会话 B</p>
+<p>根据连续事件之间的空闲间隔划分</p>
+<h3 id="_6">四、迟到事件如何处理？</h3>
+<p>国王问：</p>
+<p>“假设 Watermark 已经推进到窗口结束时间，但又来了一条更早的事件。”</p>
+<p>Flink 说道：</p>
+<p>“这需要业务决定。”</p>
+<p>常见处理方式包括：</p>
+<ul>
+<li>在允许的范围内保留窗口状态，接纳部分迟到事件并重新输出结果。</li>
+<li>将超过允许迟到范围的事件分流到侧输出流，单独补偿。</li>
+<li>对已经发布的统计结果发送修正更新。</li>
+</ul>
+<p>“因此，实时看板最好明确数据的更新语义。”</p>
+<p>“例如，一个窗口结果是最终不可变结果，还是可以持续修正的结果？”</p>
+<p>“这会影响 Redis、ClickHouse 和前端展示的设计。”</p>
+<h2 id="state-flink">第八幕：State——为什么 Flink 能记住过去？</h2>
+<p>直播运营总监又提出了一个要求。</p>
+<p>“我们需要判断每个用户在一分钟内是否连续支付失败三次。”</p>
+<p>国王问：</p>
+<p>“这不是检查当前事件就可以了吗？”</p>
+<p>Flink 回答：</p>
+<p>“不行。”</p>
+<p>“单条事件无法告诉我们用户过去一分钟已经失败过多少次。”</p>
+<p>“我们需要记住之前发生的事情。”</p>
+<p>“这就是 State，状态。”</p>
+<h3 id="_7">一、无状态计算</h3>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>金额 100 → 乘以汇率 → 金额 110
+</code></pre></div>
+
+<p>只依赖当前输入。</p>
+<p>不需要知道之前的数据。</p>
+<h3 id="_8">二、有状态计算</h3>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>用户 A：失败一次
+用户 A：失败两次
+用户 A：失败三次 → 触发风控
+</code></pre></div>
+
+<p>必须保存之前的计数和相关时间信息。</p>
+<p>“这就是有状态计算。”</p>
+<h3 id="keyed-state">三、Keyed State</h3>
+<p>Flink 可以通过 <code>keyBy(userId)</code>，使相同用户的事件进入对应的键控逻辑分区。</p>
+<p>每个 Key 可以维护自己的状态。</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>user_1001 → failCount = 2
+user_1002 → failCount = 0
+user_1003 → failCount = 1
+</code></pre></div>
+
+<p>常见状态抽象包括：</p>
+<p><code>ValueState</code>、<code>ListState</code>、<code>MapState</code>、<code>ReducingState</code> 等。</p>
+<p>国王问：</p>
+<p>“如果用户有一亿个，状态不会撑爆内存吗？”</p>
+<p>Flink 点头。</p>
+<p>“这是一个真实的问题。”</p>
+<p>“因此，状态规模、状态后端、TTL、状态清理，以及 Checkpoint 成本，都是重要的工程设计因素。”</p>
+<p>“一些状态后端能够结合磁盘和内存管理大型状态，但不会让存储和恢复成本凭空消失。”&#x20;</p>
+<p><a href="https://www.google.com/s2/favicons?domain=https://flink.apache.org\&amp;sz=32">image</a></p>
+<p>Apache Flink</p>
+<h2 id="checkpoint">第九幕：Checkpoint——计算到一半，机器突然宕机</h2>
+<p>晚上九点。</p>
+<p>系统运行正常。</p>
+<p>突然，一台 Flink TaskManager 发生故障。</p>
+<p>国王脸色大变。</p>
+<p>“用户计数状态是不是全部丢失了？”</p>
+<p>“如果数据从头重新处理，成交额不会重复统计吗？”</p>
+<p>Flink 统帅却没有慌张。</p>
+<p>“陛下，这就是 Checkpoint 发挥作用的时候。”</p>
+<h3 id="checkpoint_1">一、Checkpoint 的基本思想</h3>
+<p>“我们定期为流式作业创建一致性状态快照。”</p>
+<p>“其中不仅包括算子状态，还需要协调可恢复数据源的读取位置。”</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>Checkpoint 100：
+  Kafka Partition 0 → 对应消费位置
+  Kafka Partition 1 → 对应消费位置
+  用户 A 状态 → 100 元
+  用户 B 状态 → 300 元
+</code></pre></div>
+
+<p>“当计算任务失败时，我们可以从最近一个成功完成的 Checkpoint 恢复状态和输入进度。”</p>
+<p>“之后重新处理尚未包含在恢复快照中的事件。”</p>
+<h3 id="checkpoint-barrier">二、Checkpoint Barrier</h3>
+<p>国王问：</p>
+<p>“多台机器同时处理数据，怎样保证快照逻辑上一致？”</p>
+<p>Flink 回答：</p>
+<p>“Checkpoint Barrier 是协调分布式快照的重要机制。”</p>
+<p>“它会随数据流经过相关算子。”</p>
+<p>“在多输入场景中，需要保证快照所记录的状态与输入进度处于一致的切面。”</p>
+<p>“框架可以采用对齐或在支持条件下采用非对齐 Checkpoint 等方式处理。”</p>
+<p>“这一机制受到分布式快照思想的影响。”</p>
+<h3 id="flink-checkpoint">Flink Checkpoint 与故障恢复</h3>
+<p>Kafka 事件流</p>
+<p>Flink Operators</p>
+<p>持续处理事件、更新 State</p>
+<p>Checkpoint 100</p>
+<p>可靠保存状态与进度</p>
+<p>任务故障</p>
+<p>恢复 Checkpoint + 重放后续事件</p>
+<p>Flink 说道：</p>
+<p>“只要输入源支持恢复和重放，状态快照一致，且恢复所需数据仍然可用，就可以实现作业状态的 Exactly-Once 一致性语义。”</p>
+<p>“但是，陛下，这还不意味着所有外部系统都天然 Exactly-Once。”</p>
+<p>Flink 官方对 Checkpoint、一致性和恢复的说明也明确区分了状态一致性与外部 Sink 的端到端保证。</p>
+<h3 id="checkpoint-savepoint">三、Checkpoint 与 Savepoint</h3>
+<p>国王问：</p>
+<p>“Checkpoint 和 Savepoint 是不是一样？”</p>
+<p>“它们都涉及状态快照，但用途不同。”</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Checkpoint</th>
+<th>Savepoint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>主要目的</td>
+<td>运行时容错恢复</td>
+<td>有计划的停止、迁移、升级</td>
+</tr>
+<tr>
+<td>触发方式</td>
+<td>通常周期性自动触发</td>
+<td>通常由用户或运维操作触发</td>
+</tr>
+<tr>
+<td>生命周期</td>
+<td>通常由运行时管理</td>
+<td>通常由用户管理</td>
+</tr>
+<tr>
+<td>典型用途</td>
+<td>故障恢复</td>
+<td>应用发布、版本迁移</td>
+</tr>
+</tbody>
+</table>
+<p>“实际版本中还存在保留 Checkpoint 等机制，所以不能简单认为 Checkpoint 永远会在任务停止后被删除。”</p>
+<h2 id="exactly-once">第十幕：Exactly-Once——究竟是什么只执行一次？</h2>
+<p>国王拿出一份报告。</p>
+<p>上面写着：</p>
+<p>“本系统保证 Exactly-Once。”</p>
+<p>架构师看了一眼，皱起眉头。</p>
+<p>“陛下，这句话不够精确。”</p>
+<p>“必须问清楚：到底是哪一部分保证 Exactly-Once？”</p>
+<h3 id="_9">一、三种处理语义</h3>
+<p>At-Most-Once：最多处理一次，可能因为故障而丢失处理。</p>
+<p>At-Least-Once：至少处理一次，发生恢复或重试时可能重复处理。</p>
+<p>Exactly-Once：从定义好的系统边界观察，处理结果与恰好执行一次具有等价效果。</p>
+<p>“注意，Exactly-Once 不意味着 CPU 上的某段代码物理上只运行了一次。”</p>
+<p>“失败重试过程中，同一个事件的计算逻辑可能执行不止一次。”</p>
+<p>“关键在于最终可观察结果是否重复产生副作用。”</p>
+<h3 id="flink_1">二、Flink 内部状态一致性</h3>
+<p>假设用户的支付金额是 100 元。</p>
+<p>Flink 处理事件后，内部聚合状态增加 100 元。</p>
+<p>但任务在下一次 Checkpoint 完成前崩溃。</p>
+<p>恢复时，Flink 回到此前的状态，并重放输入事件。</p>
+<p>“如果恢复机制配置正确，就不会因为这次重放而让内部状态永久多加一次。”</p>
+<h3 id="_10">三、外部数据库的难题</h3>
+<p>国王问：</p>
+<p>“那如果已经把统计结果写进 MySQL，崩溃后又写一次呢？”</p>
+<p>架构师说道：</p>
+<p>“这取决于 Sink 的语义。”</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">UPDATE</span><span class="w"> </span><span class="n">live_gmv</span>
+<span class="k">SET</span><span class="w"> </span><span class="n">amount</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">amount</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">100</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">room_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1001</span><span class="p">;</span>
+</code></pre></div>
+
+<p>如果同一个事件重复执行，就可能多加 100 元。</p>
+<p>而如果写入的是某个窗口版本的确定性聚合结果：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">live_gmv</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">room_id</span><span class="p">,</span><span class="w"> </span><span class="n">window_start</span><span class="p">,</span><span class="w"> </span><span class="n">amount</span>
+<span class="p">)</span>
+<span class="k">VALUES</span><span class="w"> </span><span class="p">(</span><span class="mi">1001</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;2027-01-01 20:00:00&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">5000</span><span class="p">)</span>
+<span class="k">ON</span><span class="w"> </span><span class="n">DUPLICATE</span><span class="w"> </span><span class="k">KEY</span><span class="w"> </span><span class="k">UPDATE</span>
+<span class="w">    </span><span class="n">amount</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">VALUES</span><span class="p">(</span><span class="n">amount</span><span class="p">);</span>
+</code></pre></div>
+
+<p>重复写入相同结果通常不会产生重复累加。</p>
+<p>“当然，若迟到事件导致窗口金额发生合法修正，我们仍需要处理结果版本和乱序覆盖问题。”</p>
+<p>“如果外部系统和连接器支持合适的事务协议，也可以采用更强的协调机制。”</p>
+<p>“但不能因为开启了 Flink Checkpoint，就宣称任意数据库写入天然端到端 Exactly-Once。”</p>
+<h2 id="gmv">第十一幕：生产环境实战——构建直播实时 GMV 系统</h2>
+<p>经过连日战争，首席架构师终于拿出了完整方案。</p>
+<p>“陛下，我们现在设计一套真实的直播实时成交系统。”</p>
+<h3 id="_11">一、目标</h3>
+<p>业务需要：</p>
+<ul>
+<li>支付成功后，较低延迟地更新直播间 GMV。</li>
+<li>支持按分钟聚合。</li>
+<li>可以处理迟到事件和消费者恢复。</li>
+<li>允许多个业务系统分别消费支付事件。</li>
+<li>避免重复支付通知造成重复统计。</li>
+<li>核心支付事实必须来自可信交易系统。</li>
+</ul>
+<p>架构师特别强调：</p>
+<p>“GMV 统计只能基于可信的支付或交易状态事件。”</p>
+<p>“不能把浏览器随意上报的‘支付成功’当作最终支付事实。”</p>
+<h3 id="_12">二、完整架构</h3>
+<h2 id="_13">直播实时数据系统</h2>
+<p>Spring Boot 订单 / 支付服务</p>
+<p>校验支付结果并更新交易状态</p>
+<p>MySQL + Outbox</p>
+<p>业务状态与待发布事件在同一事务内持久化</p>
+<p>可靠发布 / CDC</p>
+<p>Kafka：payment-events</p>
+<p>按业务 Key 分区、保存并分发事件</p>
+<p>Flink</p>
+<p>去重、Event Time、Watermark、窗口聚合与状态恢复</p>
+<p>Redis</p>
+<p>最新看板数据</p>
+<p>ClickHouse</p>
+<p>历史分析与报表</p>
+<p>Java SSE / WebSocket → Vue3 实时大屏</p>
+<h3 id="spring-boot">三、Spring Boot 业务事务</h3>
+<p>架构师说道：</p>
+<p>“支付状态更新与 Outbox 事件写入，应该处于同一数据库事务内。”</p>
+<p>示意代码：</p>
+<div class="codehilite"><pre><span></span><code><span class="nd">@Transactional</span>
+<span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">confirmPayment</span><span class="p">(</span><span class="n">PaymentResult</span><span class="w"> </span><span class="n">result</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">updated</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">orderMapper</span><span class="p">.</span><span class="na">markPaidIfUnpaid</span><span class="p">(</span>
+<span class="w">        </span><span class="n">result</span><span class="p">.</span><span class="na">orderId</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">result</span><span class="p">.</span><span class="na">paymentId</span><span class="p">()</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">updated</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="n">outboxMapper</span><span class="p">.</span><span class="na">insert</span><span class="p">(</span>
+<span class="w">        </span><span class="n">PaymentEvent</span><span class="p">.</span><span class="na">from</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+<span class="w">    </span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>“这里假设支付结果已经经过可信渠道验证，<code>markPaidIfUnpaid</code> 是条件更新，而且只有实际完成状态转换时才写出事件。”</p>
+<p>“随后独立的发布程序从 Outbox 读取事件，发布到 Kafka。”</p>
+<p>“如果发布失败，可以重试。”</p>
+<p>“而为了处理发布成功但尚未标记 Outbox 已发送就崩溃的情况，下游还必须具备去重能力。”</p>
+<h3 id="flink-sql-gmv">四、Flink SQL 计算五分钟 GMV</h3>
+<p>Flink 可以使用 SQL 描述实时计算。</p>
+<p>先假设系统已经通过 Kafka Connector 建立了包含 <code>order_id</code>、<code>room_id</code>、<code>amount</code> 和事件时间列的可信事件表，并且上游具有明确的去重语义。</p>
+<p>下面是窗口聚合的核心 SQL：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">SELECT</span>
+<span class="w">    </span><span class="n">room_id</span><span class="p">,</span>
+<span class="w">    </span><span class="n">window_start</span><span class="p">,</span>
+<span class="w">    </span><span class="n">window_end</span><span class="p">,</span>
+<span class="w">    </span><span class="k">SUM</span><span class="p">(</span><span class="n">amount</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">gmv</span>
+<span class="k">FROM</span><span class="w"> </span><span class="k">TABLE</span><span class="p">(</span>
+<span class="w">    </span><span class="n">TUMBLE</span><span class="p">(</span>
+<span class="w">        </span><span class="k">TABLE</span><span class="w"> </span><span class="n">payment_events</span><span class="p">,</span>
+<span class="w">        </span><span class="k">DESCRIPTOR</span><span class="p">(</span><span class="n">event_time</span><span class="p">),</span>
+<span class="w">        </span><span class="nb">INTERVAL</span><span class="w"> </span><span class="s1">&#39;5&#39;</span><span class="w"> </span><span class="n">MINUTES</span>
+<span class="w">    </span><span class="p">)</span>
+<span class="p">)</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">status</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;PAID&#39;</span>
+<span class="k">GROUP</span><span class="w"> </span><span class="k">BY</span>
+<span class="w">    </span><span class="n">room_id</span><span class="p">,</span>
+<span class="w">    </span><span class="n">window_start</span><span class="p">,</span>
+<span class="w">    </span><span class="n">window_end</span><span class="p">;</span>
+</code></pre></div>
+
+<p>架构师提醒：</p>
+<p>“这是聚合核心逻辑，不是完整的可直接部署脚本。”</p>
+<p>“实际需要定义 Kafka Source、Watermark、序列化格式、Sink、Checkpoint 和恢复策略。”</p>
+<p>“尤其要注意，同一笔支付如果存在重复事件，在聚合之前需要可靠去重，否则金额仍然可能被重复累计。”</p>
+<p>“此外，如果业务使用 UTC 事件时间，但报表要求北京时间自然分钟边界，就必须明确时间类型与时区配置。”</p>
+<h3 id="_14">五、最终一致性与前端展示</h3>
+<p>国王问：</p>
+<p>“如果支付成功之后，实时大屏两秒内还没有更新，这算故障吗？”</p>
+<p>架构师回答：</p>
+<p>“这需要结合服务等级目标。”</p>
+<p>“交易数据库是支付事实的权威来源。”</p>
+<p>“而实时大屏通常是异步派生视图。”</p>
+<p>“它们不一定做到瞬时同步。”</p>
+<p>“所以应分别监控：”</p>
+<p>交易是否正确提交。</p>
+<p>Outbox 是否积压。</p>
+<p>Kafka Producer 是否持续报错。</p>
+<p>Kafka 消费进度是否落后。</p>
+<p>Flink Watermark 是否停止推进。</p>
+<p>Checkpoint 是否持续成功。</p>
+<p>Redis 和 ClickHouse 写入延迟是否异常。</p>
+<p>“我们还应该为 GMV 设计周期性对账，核对实时聚合与权威交易数据。”</p>
+<p>“如果发现差异，能够根据事件日志或交易快照进行重建和修正。”</p>
+<h2 id="_15">第十二幕：帝国最终考核——十道高频面试题</h2>
+<p>经历了整整一个月的战争，国王决定考验年轻工程师。</p>
+<div class="quiz" data-quiz="6"></div>
+
+<h2 id="_16">尾声：更大的敌人——海量数据与高并发的交汇</h2>
+<p>夜深了。</p>
+<p>直播间的成交额仍然不断变化。</p>
+<p>Kafka 的各个 Partition 持续追加事件。</p>
+<p>Flink 的 TaskManager 不断计算。</p>
+<p>ClickHouse 分析城接收新的聚合结果。</p>
+<p>Spring Boot 通过 SSE 将数据推送到 Vue3 大屏。</p>
+<p>国王望着终于恢复正常的系统，问道：</p>
+<p>“架构师，我们现在是不是拥有了一套完整的实时大数据系统？”</p>
+<p>架构师点头。</p>
+<p>“已经具备了重要骨架。”</p>
+<p>“但陛下，我们还有一个尚未解决的问题。”</p>
+<p>“什么问题？”</p>
+<p>“如果明天不是一百万观众，而是一千万观众呢？”</p>
+<p>“如果一个直播间成为超级热点，所有事件都使用同一个 roomId，Flink 的 <code>keyBy(roomId)</code> 会发生什么？”</p>
+<p>国王立刻想起：</p>
+<p>“数据倾斜！”</p>
+<p>“没错。”</p>
+<p>“如果消息进入 Kafka 的速度持续高于 Flink 的处理能力呢？”</p>
+<p>“消息积压！”</p>
+<p>“如果 Flink 下游 ClickHouse 写入越来越慢呢？”</p>
+<p>“背压！”</p>
+<p>“如果我们将 Flink 并行度从 32 扩容到 128 呢？”</p>
+<p>国王沉默了。</p>
+<p>架构师缓缓说道：</p>
+<p>“这意味着我们必须重新分配状态，并确保新的计算任务能够接管原有状态。”</p>
+<p>“分布式计算不是搭建好一次就结束的。”</p>
+<p>“它是一场持续面对负载变化、故障、资源竞争和数据正确性挑战的战争。”</p>
+<p>远处，帝国的监控系统突然发出新的警报：</p>
+<div class="codehilite"><pre><span></span><code>Kafka Consumer Lag：持续增长
+
+Flink Backpressure：HIGH
+
+Checkpoint Duration：显著上升
+
+Sink Throughput：持续下降
+</code></pre></div>
+
+<p>国王望向架构师。</p>
+<p>“看来下一场战争已经开始了。”</p>
+<p>“正是如此。”</p>
+<h2 id="_17">下一章：《背压风暴——千万级实时数据系统的生死线》</h2>
+<p>第七章将深入实时大数据生产环境的性能与稳定性问题：</p>
+<ol>
+<li>背压 Backpressure：为什么下游慢会让整条 Flink 流水线变慢。</li>
+<li>Kafka Consumer Lag：如何定位消息积压，到底该扩 Partition 还是扩 Consumer。</li>
+<li>Flink 并行度与 Slot：JobManager、TaskManager、Slot、Operator Chain 的运行原理。</li>
+<li>Checkpoint 失败：Barrier Alignment、Checkpoint 超时、状态过大与恢复。</li>
+<li>State Backend：Heap State、RocksDB 等状态存储方案的权衡。</li>
+<li>热点直播间：如何解决单个 roomId 导致的严重数据倾斜。</li>
+<li>动态扩缩容：Flink 状态重分配、Savepoint 与无损升级。</li>
+<li>生产排障实战：从 Kafka、Flink、Redis、ClickHouse 到 Java 服务的全链路定位。</li>
+<li>高并发与大数据融合：如何设计一套可应对千万级用户、亿级事件量的直播实时计算架构。</li>
+</ol>
+<p>《数据帝国》第六章·完</p></article><section class="practice"><h2>把原理放进实验</h2><p>调整参数，观察系统如何变化。所有实验均在当前浏览器中运行。</p><a href="practice.html">查看全部交互实验 →</a> · <a href="editorial.html">内容整理与技术校正 →</a></section><nav class="chapter-nav" aria-label="上下章"><a href="chapter-05.html">← 上一章<span>Spark 崛起——内存计算与 DAG 战争</span></a><a href="chapter-07.html">下一章 →<span>背压风暴——千万级实时系统的生死线</span></a></nav></main></div><footer><a href="index.html">数据帝国</a><p>在故事中理解系统，在实验中观察原理。<span>现有 8 章 · 第 9 章待续</span></p><a href="https://github.com/wupzl/data-empire-reader">项目源码 ↗</a></footer>
+<dialog id="search-dialog" aria-labelledby="search-title"><div class="search-top"><h2 id="search-title">在帝国里寻找答案</h2><button id="search-close" aria-label="关闭搜索">关闭 ×</button></div><label for="query">关键词或代码，例如 Redis、背压、Checkpoint</label><input id="query" type="search" autocomplete="off" placeholder="搜索全书正文…"><p id="search-status" role="status">输入关键词，搜索 8 章内容</p><div id="search-results"></div></dialog></body></html>

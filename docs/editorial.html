@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="description" content="数据帝国：以 Java 后端工程师的视角，在小说和交互实验中理解高并发与大数据。现有 8 章，第 9 章待续。"><title>内容整理与技术校正 · 数据帝国</title><script>try{document.documentElement.dataset.theme=localStorage.getItem('de-theme')||'light';document.documentElement.style.setProperty('--reader-size',Math.max(14,Math.min(26,Number(localStorage.getItem('de-size'))||18))+'px')}catch(e){}</script><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="shelf-nav.css"><link rel="stylesheet" href="labs.css"><script src="app.js" defer></script><script src="labs.js" defer></script><script src="quizzes.js" defer></script></head>
+<body data-chapter="0" data-count="8"><a class="skip" href="#main">跳到正文</a><div id="progress" aria-hidden="true"></div><header class="topbar"><a class="brand" href="index.html"><span class="emblem" aria-hidden="true">D<span>↗</span></span><span>数据帝国<small>THE DATA EMPIRE</small></span></a><nav class="shelf-nav" aria-label="学习项目导航"><a class="shelf-home" href="/">← 学习书架</a><details class="shelf-switch"><summary>切换项目 ▾</summary><div class="shelf-menu"><a href="/pytorch-apprentice/">PyTorch：炼金术士的学徒</a><a href="/ai-era-reader/">AI 纪元</a><a href="/data-empire-reader/" aria-current="true">数据帝国</a></div></details></nav><div class="controls"><button id="search-open" aria-label="搜索全书">搜索 <kbd>/</kbd></button><button id="smaller" aria-label="缩小字号">A−</button><button id="larger" aria-label="增大字号">A＋</button><button id="theme" aria-label="切换深浅色主题">◐</button></div></header>
+<main id="main" class="standalone"><a href="index.html">← 返回全书目录</a><article><h1 id="_1">内容整理与技术校正</h1>
+<p>本项目是一部持续连载的小说式技术读物。现有八章正文；第九章《数据仓库之城——从混乱日志到可信指标》仅有原稿预告，尚未发布。</p>
+<h2 id="_2">原稿与维护入口</h2>
+<p><code>source/data-empire-original.md</code> 完整保存用户提供的原稿，不覆盖、不补写结局。<code>chapters/01.md</code> 至 <code>08.md</code> 为整理后的维护版本。日常修改章节后运行 <code>python build.py</code>；不必重新导入原稿。</p>
+<p>保留故事、代码、技术论证、现有章末预告与图片来源。清除独立的“下一章。”对话残留、复制的站点 favicon 徽标；修复标题层级、公式转义和复制出的交互控件文本。技术架构示意保留为本地正文代码块，不依赖远程图片服务。外部场景插图保留原链接、来源和失败提示。</p>
+<h2 id="_3">按章节校正与澄清</h2>
+<table>
+<thead>
+<tr>
+<th>章节</th>
+<th>整理与技术说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>在阅读提示中明确利特尔法则的稳态条件与统计边界，区分在途请求数与线程数；补全可调 QPS、平均响应时间的交互。</td>
+</tr>
+<tr>
+<td>2</td>
+<td>明确 Lua 原子性是命令不被穿插，不代表错误回滚或跨系统事务；重建非原子库存扣减与原子检查扣减的逐步对比；令牌桶明确为手动补充模型。</td>
+</tr>
+<tr>
+<td>3</td>
+<td>深分页显示 OFFSET 加页大小的处理量；游标读取页大小之外仍有索引定位等成本，不将记录数称为实测耗时。分片使用大整数运算，避免 JavaScript 大 ID 精度丢失。</td>
+</tr>
+<tr>
+<td>4</td>
+<td>明确热点 80% 时热点 Reducer 为 82%、其余各 2% 的前提：剩余记录分配给全部十个 Reducer；WordCount 使用空白分词、区分大小写。</td>
+</tr>
+<tr>
+<td>5</td>
+<td>提示 Spark 并非要求全部数据驻留内存；保留执行计划与磁盘溢写讨论。</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Watermark 教学模型明确秒级近似、单输入和零 allowed lateness；按窗口关闭判断 [0,10) 窗口是否接受后到事件，避免把一切早于 Watermark 的事件都当作必须丢弃。</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Kafka Lag 已为零时清空时间为零；有积压且消费能力不高于生产速率时显示无法清空，不输出负时间或除零。</td>
+</tr>
+<tr>
+<td>8</td>
+<td>API 容量公式向上取整，单实例吞吐与负载比例不得为零；保留虚构验收报告的说明，末章导航标注待续。</td>
+</tr>
+</tbody>
+</table>
+<p>上述说明用于限定模型的适用条件，不声称完成真实分布式系统压测。正文中的 Java、SQL、Lua 与流处理代码为讲解片段，本网站不在浏览器内执行这些服务端代码。</p>
+<h2 id="_4">面试题卡补充</h2>
+<p>原稿复制结果只留下每组当前可见的一道题，其他题卡与多数答案缺失。本次保留七组原问题，并依据各章主题补充为 62 道可翻页、可展开答案的题卡；题卡中标注补充来源，不将补充内容冒充原稿。</p>
+<h2 id="_5">官方参考</h2>
+<ul>
+<li><a href="https://redis.io/docs/latest/develop/programmability/eval-intro/">Redis Lua 原子执行语义</a></li>
+<li><a href="https://redis.io/docs/latest/develop/programmability/redis-lua-api/">Redis Lua 错误与回滚说明</a></li>
+<li><a href="https://dev.mysql.com/doc/refman/8.4/en/limit-optimization.html">MySQL LIMIT 优化</a></li>
+<li><a href="https://nightlies.apache.org/flink/flink-docs-stable/docs/dev/datastream/event-time/generating_watermarks/">Flink Watermark 生成、多输入与空闲输入</a></li>
+<li><a href="https://nightlies.apache.org/flink/flink-docs-stable/docs/dev/datastream/operators/windows/">Flink 窗口生命周期与迟到数据</a></li>
+<li><a href="https://spark.apache.org/docs/latest/rdd-programming-guide.html">Spark RDD 缓存与持久化</a></li>
+</ul>
+<h2 id="_6">阅读与隐私</h2>
+<p>无需账号。阅读位置、字号、主题只保存在当前浏览器，不跨设备同步。全文搜索、公式、代码高亮、交互脚本均使用本地静态资源。只有保留的外部场景插图可能向图片服务发起网络请求；失败不影响正文。</p>
+<p>界面与阅读功能沿用同一作者的 PyTorch 阅读项目。KaTeX 的上游许可证保存在 <code>vendor/KaTeX-LICENSE.txt</code>。没有为原创正文或项目整体另行指定开源许可证。</p></article></main><footer><a href="index.html">数据帝国</a><p>在故事中理解系统，在实验中观察原理。<span>现有 8 章 · 第 9 章待续</span></p><a href="https://github.com/wupzl/data-empire-reader">项目源码 ↗</a></footer>
+<dialog id="search-dialog" aria-labelledby="search-title"><div class="search-top"><h2 id="search-title">在帝国里寻找答案</h2><button id="search-close" aria-label="关闭搜索">关闭 ×</button></div><label for="query">关键词或代码，例如 Redis、背压、Checkpoint</label><input id="query" type="search" autocomplete="off" placeholder="搜索全书正文…"><p id="search-status" role="status">输入关键词，搜索 8 章内容</p><div id="search-results"></div></dialog></body></html>

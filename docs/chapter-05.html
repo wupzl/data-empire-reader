@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="description" content="数据帝国：以 Java 后端工程师的视角，在小说和交互实验中理解高并发与大数据。现有 8 章，第 9 章待续。"><title>Spark 崛起——内存计算与 DAG 战争 · 数据帝国</title><script>try{document.documentElement.dataset.theme=localStorage.getItem('de-theme')||'light';document.documentElement.style.setProperty('--reader-size',Math.max(14,Math.min(26,Number(localStorage.getItem('de-size'))||18))+'px')}catch(e){}</script><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="shelf-nav.css"><link rel="stylesheet" href="labs.css"><script src="app.js" defer></script><script src="labs.js" defer></script><script src="quizzes.js" defer></script></head>
+<body data-chapter="5" data-count="8"><a class="skip" href="#main">跳到正文</a><div id="progress" aria-hidden="true"></div><header class="topbar"><a class="brand" href="index.html"><span class="emblem" aria-hidden="true">D<span>↗</span></span><span>数据帝国<small>THE DATA EMPIRE</small></span></a><nav class="shelf-nav" aria-label="学习项目导航"><a class="shelf-home" href="/">← 学习书架</a><details class="shelf-switch"><summary>切换项目 ▾</summary><div class="shelf-menu"><a href="/pytorch-apprentice/">PyTorch：炼金术士的学徒</a><a href="/ai-era-reader/">AI 纪元</a><a href="/data-empire-reader/" aria-current="true">数据帝国</a></div></details></nav><div class="controls"><button id="search-open" aria-label="搜索全书">搜索 <kbd>/</kbd></button><button id="smaller" aria-label="缩小字号">A−</button><button id="larger" aria-label="增大字号">A＋</button><button id="theme" aria-label="切换深浅色主题">◐</button></div></header>
+<div class="reader-layout"><aside class="sidebar"><p class="eyebrow">THE EMPIRE’S JOURNEY</p><nav aria-label="全书章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="current" href="chapter-05.html" aria-current="page"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><details class="local-toc" open><summary>本章线索</summary><div class="toc">
+<ul>
+<li><a href="#_1">第一幕：七十二次计算，帝国等待了三天</a></li>
+<li><a href="#rdd">第二幕：RDD——不再只是一个普通数组</a></li>
+<li><a href="#lazy-evaluation">第三幕：Lazy Evaluation——国王下达命令，士兵却没有行动</a></li>
+<li><a href="#dag-spark">第四幕：DAG 战争——Spark 如何指挥一千台机器？</a></li>
+<li><a href="#cache-persist">第五幕：Cache 与 Persist——为什么内存不是越多越好？</a></li>
+<li><a href="#catalyst">第六幕：Catalyst——能够重写作战计划的军师</a></li>
+<li><a href="#join">第七幕：Join 之战——两张亿级表如何连接？</a></li>
+<li><a href="#_6">第八幕：数据倾斜再现——最强大的计算军团，也无法逃脱热点</a></li>
+<li><a href="#oom-128gb">第九幕：OOM 之夜——为什么 128GB 内存仍然不够？</a></li>
+<li><a href="#spark">第十幕：真正的工程实践——用 Spark 统计一亿条订单</a></li>
+<li><a href="#_15">第十一幕：面试官的十道诘问</a></li>
+<li><a href="#_16">尾声：永不停歇的数据之河</a></li>
+<li><a href="#kafka-flink">下一章：《实时之河——Kafka 与 Flink 的崛起》</a></li>
+</ul>
+</div>
+</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 05 <span>/ 08 · 约 30 分钟</span></p><h1>Spark 崛起——内存计算与 DAG 战争</h1><p class="topics">RDD · DAG · Spark SQL · 执行计划</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="current" href="chapter-05.html" aria-current="page"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
+<ul>
+<li><a href="#_1">第一幕：七十二次计算，帝国等待了三天</a></li>
+<li><a href="#rdd">第二幕：RDD——不再只是一个普通数组</a></li>
+<li><a href="#lazy-evaluation">第三幕：Lazy Evaluation——国王下达命令，士兵却没有行动</a></li>
+<li><a href="#dag-spark">第四幕：DAG 战争——Spark 如何指挥一千台机器？</a></li>
+<li><a href="#cache-persist">第五幕：Cache 与 Persist——为什么内存不是越多越好？</a></li>
+<li><a href="#catalyst">第六幕：Catalyst——能够重写作战计划的军师</a></li>
+<li><a href="#join">第七幕：Join 之战——两张亿级表如何连接？</a></li>
+<li><a href="#_6">第八幕：数据倾斜再现——最强大的计算军团，也无法逃脱热点</a></li>
+<li><a href="#oom-128gb">第九幕：OOM 之夜——为什么 128GB 内存仍然不够？</a></li>
+<li><a href="#spark">第十幕：真正的工程实践——用 Spark 统计一亿条订单</a></li>
+<li><a href="#_15">第十一幕：面试官的十道诘问</a></li>
+<li><a href="#_16">尾声：永不停歇的数据之河</a></li>
+<li><a href="#kafka-flink">下一章：《实时之河——Kafka 与 Flink 的崛起》</a></li>
+</ul>
+</div>
+</details><article><blockquote>
+<p>阅读提示：Spark 不要求数据全部驻留内存；缓存、溢写、Shuffle 与执行计划需要结合数据规模分析。</p>
+</blockquote>
+<p>上一章，Spring 王国踏上分布式大陆，见识了 Hadoop 的三大军团：HDFS 负责存储，YARN 负责资源管理，MapReduce 负责分布式计算。</p>
+<p>一千台机器可以共同处理 PB 级数据。然而，当计算任务变得越来越复杂，MapReduce 的多阶段执行方式开始暴露出局限。</p>
+<p>此时，数据大陆出现了一位新的统帅。</p>
+<p>他的名字叫作 Apache Spark。</p>
+<p><img alt="故事场景插图" src="https://images.openai.com/static-rsc-4/XyZW6snVMff2t_7PGTQl9AnVAOW3QcUnjLtmITdtx_3uFvGmmbs_mL15_F0cIYiteP2LV-hIQVpYrKqb1feWqO7-BhD6rNkPFtMDUfIM4ilHUxjgJ19ulYUVVXAfOCRARibg2KxJCJONVh9unCkYgr1GWr7DAAw9_EmR2dLvc9A?purpose=inline" /></p>
+<p><em>图片来源：Doom The Dark Ages - czy jest otwarty świat, swobodna eksploracja | Eurogamer.pl</em></p>
+<p><a href="https://www.eurogamer.pl/doom-the-dark-ages-czy-jest-otwarty-swiat-swobodna-eksploracja?utm_source=chatgpt.com">eurogamer.pl</a></p>
+<h2 id="_1">第一幕：七十二次计算，帝国等待了三天</h2>
+<p>数据大陆，冬季。</p>
+<p>Hadoop 帝国中央计算大厅。</p>
+<p>一百台服务器正在日夜不停地工作。</p>
+<p>这次任务来自帝国财政大臣。</p>
+<p>“陛下，我们希望建立一个用户消费行为分析模型。”</p>
+<p>“需要分析过去五年的交易记录，识别不同用户群体的消费特征。”</p>
+<p>国王 Java 问：</p>
+<p>“数据有多少？”</p>
+<p>“二十 TB。”</p>
+<p>“计算多少次？”</p>
+<p>“需要进行七十二轮迭代。”</p>
+<p>国王十分淡定。</p>
+<p>“二十 TB 而已，我们不是已经有 Hadoop 了吗？”</p>
+<p>首席架构师点头。</p>
+<p>“确实可以使用 MapReduce。”</p>
+<p>“但是，陛下，这次任务与之前不同。”</p>
+<p>“之前我们统计词频，主要执行一次 Map 和 Reduce。”</p>
+<p>“而现在，我们需要对数据进行反复计算。”</p>
+<p>“每一轮的结果，都可能成为下一轮的输入。”</p>
+<p>国王挥手。</p>
+<p>“那就让 MapReduce 运行七十二次。”</p>
+<p>架构师叹了口气。</p>
+<p>“问题恰恰在这里。”</p>
+<h3 id="mapreduce">一、MapReduce 的多阶段执行代价</h3>
+<p>在经典 Hadoop MapReduce 模型中，多个独立作业之间通常通过 HDFS 等持久化存储传递结果。</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>HDFS 原始数据
+      ↓
+MapReduce Job 1
+      ↓
+HDFS 中间结果
+      ↓
+MapReduce Job 2
+      ↓
+HDFS 中间结果
+      ↓
+MapReduce Job 3
+      ↓
+   最终结果
+</code></pre></div>
+
+<p>国王突然意识到一个问题。</p>
+<p>“也就是说，计算过程中可能发生大量磁盘读写？”</p>
+<p>“正是。”</p>
+<p>“而且每轮作业还存在任务初始化、调度、资源申请等开销。”</p>
+<p>“对于迭代算法，这些开销会反复出现。”</p>
+<p>“但我们能不能把下一轮要用的数据留在内存中？”</p>
+<p>大厅突然安静。</p>
+<p>一位身披蓝色披风的年轻统帅走了进来。</p>
+<p>“当然可以。”</p>
+<p>“不过，陛下，我们不仅要考虑内存。”</p>
+<p>“还要重新设计整个分布式计算执行模型。”</p>
+<p>“你是谁？”</p>
+<p>“Spark。”</p>
+<h2 id="rdd">第二幕：RDD——不再只是一个普通数组</h2>
+<p>Spark 统帅来到地图前。</p>
+<p>“陛下，首先需要认识我的核心抽象之一。”</p>
+<p>“RDD。”</p>
+<p>国王问：</p>
+<p>“这是一个 Java List 吗？”</p>
+<p>Spark 摇头。</p>
+<p>“它们看起来有些相似，但本质不同。”</p>
+<p>RDD（Resilient Distributed Dataset），即弹性分布式数据集。</p>
+<p>我们把这个名字拆开理解。</p>
+<h3 id="distributed">一、Distributed：分布式</h3>
+<p>“陛下，假设我们有一亿条订单。”</p>
+<p>“普通 Java List 通常位于一个 JVM 所管理的数据空间中。”</p>
+<p>“而 RDD 可以把数据逻辑上划分为多个 Partition，由不同 Executor 处理。”</p>
+<h3 id="rdd_1">RDD 分区与并行处理</h3>
+<p>RDD：一亿条订单</p>
+<p>分区 0</p>
+<p>分区 1</p>
+<p>分区 2</p>
+<p>分区 3</p>
+<p>Executor 1</p>
+<p>执行分区任务</p>
+<p>Executor 2</p>
+<p>执行分区任务</p>
+<p>简化示例：一个 Executor 可以在资源允许时并行运行多个 Task；Partition 与 Executor 不是永久一对一绑定关系。</p>
+<p>“国王，RDD 是一个分布式数据集的逻辑抽象，而不是必须在创建时就把全部数据装进内存。”</p>
+<h3 id="resilient">二、Resilient：弹性与容错</h3>
+<p>国王问：</p>
+<p>“如果一台 Executor 突然宕机，它负责的分区数据不就丢失了吗？”</p>
+<p>Spark 微微一笑。</p>
+<p>“RDD 的重要设计之一，是记录计算依赖关系。”</p>
+<p>“这个关系叫作 Lineage。”</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>原始日志 RDD
+     ↓ filter
+有效日志 RDD
+     ↓ map
+用户金额 RDD
+     ↓ reduceByKey
+用户消费总额 RDD
+</code></pre></div>
+
+<p>“如果某个分区丢失，Spark 在满足条件时可以沿着依赖关系重新计算它。”</p>
+<p>“这意味着，对于很多确定性计算，我们不必在每个步骤都立即把数据完整持久化。”</p>
+<p>国王点头。</p>
+<p>“这就是 Resilient。”</p>
+<p>“是的。”</p>
+<p>“但容错并不是免费的。如果依赖链很长，重新计算的代价也可能很大。”</p>
+<p>“因此，我们还需要 Cache、Persist 和 Checkpoint。”</p>
+<h3 id="rdd_2">三、RDD 的不可变性</h3>
+<p>Spark 继续说道：</p>
+<p>“还有一个关键特点。”</p>
+<p>“RDD 不可变。”</p>
+<p>国王问：</p>
+<p>“那如何修改其中的数据？”</p>
+<p>“我们不会原地修改 RDD。”</p>
+<p>“而是通过 Transformation 生成新的 RDD。”</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>numbers = sc.parallelize([1, 2, 3, 4])doubled = numbers.map(lambda x: x * 2)
+</code></pre></div>
+
+<p><code>numbers</code> 仍然表示原始数据集。</p>
+<p><code>doubled</code> 是新的 RDD。</p>
+<p>“不可变设计让依赖追踪和失败后的重算更加容易组织。”</p>
+<h2 id="lazy-evaluation">第三幕：Lazy Evaluation——国王下达命令，士兵却没有行动</h2>
+<p>第二天，国王决定亲自使用 Spark。</p>
+<p>他写下一段 PySpark 代码。</p>
+<div class="codehilite"><pre><span></span><code>rdd = sc.parallelize([1, 2, 3, 4, 5])result = (    rdd    .map(lambda x: x * 2)    .filter(lambda x: x &gt; 5))print(&quot;计算已经完成！&quot;)
+</code></pre></div>
+
+<p>国王等待了一会儿。</p>
+<p>却没有看到他期待的计算输出。</p>
+<p>他愤怒地问：</p>
+<p>“我已经调用了 map 和 filter，为什么 Spark 没有立即完成整个任务？”</p>
+<p>Spark 回答：</p>
+<p>“陛下，因为它们是 Transformation。”</p>
+<h3 id="transformation">一、Transformation：描述计算</h3>
+<p>常见 RDD Transformation：</p>
+<ul>
+<li><code>map</code></li>
+<li><code>filter</code></li>
+<li><code>flatMap</code></li>
+<li><code>mapPartitions</code></li>
+<li><code>reduceByKey</code></li>
+<li><code>join</code></li>
+<li><code>distinct</code></li>
+</ul>
+<p>“这些操作主要是在构建新的 RDD 及其依赖关系。”</p>
+<p>“它们通常不会立即触发整个分布式作业执行。”</p>
+<h3 id="action">二、Action：触发计算</h3>
+<p>Spark 在代码后面补上一行：</p>
+<div class="codehilite"><pre><span></span><code>print(result.collect())
+</code></pre></div>
+
+<p>这一次，计算开始执行。</p>
+<p>输出：</p>
+<div class="codehilite"><pre><span></span><code>[6, 8, 10]
+</code></pre></div>
+
+<p>Spark 说道：</p>
+<p>“<code>collect()</code> 是 Action。”</p>
+<p>“它会触发计算，并把结果收集到 Driver。”</p>
+<p>“不过，如果结果巨大，直接 collect 可能把 Driver 内存撑爆。”</p>
+<p>“这也是为什么生产环境中，不能随意对海量 RDD 使用 collect。”</p>
+<p>国王若有所思。</p>
+<p>“所以 map 和 filter 更像是制定作战计划。”</p>
+<p>“Action 才是正式下达开战命令？”</p>
+<p>“很形象。”</p>
+<h3 id="_2">三、为什么要惰性执行？</h3>
+<p>“陛下，假设我们需要经过五步计算。”</p>
+<p>“如果每一步都立即执行并物化结果，可能引入大量不必要的数据处理。”</p>
+<p>“而惰性执行让 Spark 可以在触发 Action 时，根据依赖关系组织任务。”</p>
+<p>“对于能够流水线执行的窄依赖操作，多个步骤可以合并在一个 Stage 内执行。”</p>
+<p>“而在 DataFrame 与 Spark SQL 层面，Catalyst 还可以进一步优化逻辑执行计划。”</p>
+<blockquote>
+<p>记忆：Transformation 构建计算关系，Action 触发实际计算。</p>
+</blockquote>
+<h2 id="dag-spark">第四幕：DAG 战争——Spark 如何指挥一千台机器？</h2>
+<p>Spark 在地上画出一幅作战地图。</p>
+<p>“陛下，DAG 的全称是 Directed Acyclic Graph。”</p>
+<p>“有向无环图。”</p>
+<p>“您可以把它理解为一张带有方向、且不包含依赖环路的计算关系图。”</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>读取订单
+    ↓
+过滤有效订单
+    ↓
+提取 userId 和 amount
+    ↓
+按 userId 分组聚合
+    ↓
+按金额排序
+    ↓
+保存结果
+</code></pre></div>
+
+<p>“这条数据处理流水线并不是每一步都必须单独启动一轮全新的分布式作业。”</p>
+<p>“Spark 会分析依赖，划分 Stage，再将 Stage 拆成 Task。”</p>
+<h3 id="jobstagetask">一、Job、Stage、Task</h3>
+<p>架构师要求 Spark 用最简单的语言解释三个概念。</p>
+<p>Spark 回答：</p>
+<p>Job：通常由一个 Action 触发的计算作业。</p>
+<p>Stage：根据计算依赖与 Shuffle 边界划分出的任务阶段。</p>
+<p>Task：一个 Stage 内针对某个数据分区执行的最小调度工作单元。</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>Job：统计用户消费金额
+
+Stage 0：
+  Task 0 → Partition 0
+  Task 1 → Partition 1
+  Task 2 → Partition 2
+  Task 3 → Partition 3
+
+Shuffle
+
+Stage 1：
+  Task 0 → Partition 0
+  Task 1 → Partition 1
+
+结果输出
+</code></pre></div>
+
+<p>“陛下，多个 Task 可以被调度到不同 Executor 并行执行。”</p>
+<p>“但 Stage 之间存在必要的依赖约束。”</p>
+<h3 id="_3">二、窄依赖与宽依赖</h3>
+<p>国王问：</p>
+<p>“究竟是什么决定了 Stage 如何拆分？”</p>
+<p>Spark 答道：</p>
+<p>“首先需要理解两种依赖。”</p>
+<p>窄依赖（Narrow Dependency）</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>rdd.map(lambda x: x * 2)
+</code></pre></div>
+
+<p>通常一个子分区只依赖有限数量的父分区，不需要全局重新分配数据。</p>
+<p>宽依赖（Wide Dependency）</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>pairs.reduceByKey(lambda a, b: a + b)
+</code></pre></div>
+
+<p>同一个 Key 的数据可能存在于多个父分区。</p>
+<p>为了聚合，需要跨分区交换数据。</p>
+<p>这种 Shuffle 依赖通常构成 Stage 边界。</p>
+<h3 id="_4">窄依赖与宽依赖</h3>
+<p>窄依赖</p>
+<p>每个子分区通常依赖少量父分区</p>
+<p>宽依赖</p>
+<p>子分区可能依赖多个父分区的数据</p>
+<p>国王恍然大悟。</p>
+<p>“所以 Shuffle 不仅昂贵，还会影响整个作业的阶段划分。”</p>
+<p>“没错。”</p>
+<p>“这也是 Spark 性能调优的重要切入点。”</p>
+<h2 id="cache-persist">第五幕：Cache 与 Persist——为什么内存不是越多越好？</h2>
+<p>Spark 帝国取得了第一次胜利。</p>
+<p>但是第三天，监控平台突然报警。</p>
+<p>“陛下！Executor 内存即将耗尽！”</p>
+<p>国王愣住了。</p>
+<p>“不是说 Spark 擅长内存计算吗？”</p>
+<p>“为什么反而出现内存不足？”</p>
+<p>Spark 回答：</p>
+<p>“因为内存是有限的资源。”</p>
+<p>“能够使用内存，不等于应该把所有数据全部放进内存。”</p>
+<h3 id="_5">一、没有缓存时会发生什么？</h3>
+<p>假设我们有一批日志，需要进行两种分析。</p>
+<div class="codehilite"><pre><span></span><code><span class="n">logs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">spark</span><span class="p">.</span><span class="k">read</span><span class="p">.</span><span class="n">parquet</span><span class="p">(</span><span class="ss">&quot;/data/logs&quot;</span><span class="p">)</span><span class="k">valid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">logs</span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="ss">&quot;status = 200&quot;</span><span class="p">)</span><span class="k">count</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">valid</span><span class="p">.</span><span class="k">count</span><span class="p">()</span><span class="n">users</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">valid</span><span class="p">.</span><span class="k">select</span><span class="p">(</span><span class="ss">&quot;user_id&quot;</span><span class="p">).</span><span class="k">distinct</span><span class="p">().</span><span class="k">count</span><span class="p">()</span>
+</code></pre></div>
+
+<p>国王问：</p>
+<p>“这里的 valid 不是已经生成了吗？”</p>
+<p>“为什么第二次分析可能又要读取原始数据？”</p>
+<p>Spark 解释：</p>
+<p>“DataFrame 的执行也是惰性的。”</p>
+<p>“如果没有缓存或其他可复用机制，多个 Action 可能重复计算相同的数据处理链。”</p>
+<h3 id="cache">二、Cache：存储可复用的结果</h3>
+<p>Spark 增加了一行：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">valid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">logs</span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="ss">&quot;status = 200&quot;</span><span class="p">).</span><span class="k">cache</span><span class="p">()</span><span class="k">valid</span><span class="p">.</span><span class="k">count</span><span class="p">()</span><span class="w">  </span><span class="o">#</span><span class="w"> </span><span class="err">首次执行，填充缓存</span><span class="k">valid</span><span class="p">.</span><span class="k">select</span><span class="p">(</span><span class="ss">&quot;user_id&quot;</span><span class="p">).</span><span class="k">distinct</span><span class="p">().</span><span class="k">count</span><span class="p">()</span>
+</code></pre></div>
+
+<p>“第一次 Action 触发计算并填充缓存。”</p>
+<p>“后续 Action 有机会复用已经缓存的数据。”</p>
+<p>“但缓存不是调用 <code>cache()</code> 后立即将所有数据完整加载进内存。”</p>
+<p>“缓存数据也可能因为内存不足而被淘汰，或者根据持久化策略存储到磁盘。”</p>
+<h3 id="persist">三、Persist：选择不同存储策略</h3>
+<p>Spark 展示几种常见策略。</p>
+<table>
+<thead>
+<tr>
+<th>策略</th>
+<th>主要特点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MEMORY_ONLY</code></td>
+<td>尽量在内存中保存</td>
+</tr>
+<tr>
+<td><code>MEMORY_AND_DISK</code></td>
+<td>内存不足时可使用磁盘</td>
+</tr>
+<tr>
+<td><code>DISK_ONLY</code></td>
+<td>保存在磁盘</td>
+</tr>
+<tr>
+<td><code>MEMORY_ONLY_2</code></td>
+<td>保留两个副本，提高容错能力</td>
+</tr>
+</tbody>
+</table>
+<p>“具体支持哪些存储级别，以及默认行为，取决于 Spark API 和版本。”</p>
+<p>“例如 PySpark RDD 与 DataFrame 的默认持久化行为不能不加区分地混为一谈。”&#x20;</p>
+<p><a href="https://www.google.com/s2/favicons?domain=https://spark.apache.org\&amp;sz=32">image</a></p>
+<p>Spark 4.2.0 Documentation</p>
+<p>国王问：</p>
+<p>“那我把所有 DataFrame 都缓存，不就能加速了吗？”</p>
+<p>Spark 摇头。</p>
+<p>“完全不是。”</p>
+<p>“缓存需要占用存储资源。”</p>
+<p>“如果数据只使用一次，缓存可能没有收益，反而增加计算和内存压力。”</p>
+<p>“如果缓存对象太多，还可能挤占 Shuffle 和执行内存。”</p>
+<p>“所以真正需要缓存的，通常是计算代价高、预计会被反复使用的数据。”</p>
+<h3 id="checkpoint">四、Checkpoint：截断过长的依赖链</h3>
+<p>架构师又问：</p>
+<p>“如果一个 RDD 的 Lineage 已经有几百层，发生故障后重新计算岂不是很昂贵？”</p>
+<p>Spark 点头。</p>
+<p>“这就需要考虑 Checkpoint。”</p>
+<p>“Checkpoint 可以把数据物化到可靠存储，并使后续恢复不必一直追溯完整的上游依赖链。”</p>
+<p>“它与 Cache 的主要目标并不相同。”</p>
+<ul>
+<li>Cache/Persist：重点是数据复用和性能。</li>
+<li>Checkpoint：重点是截断依赖、简化恢复路径。</li>
+</ul>
+<p>“实际使用中，Checkpoint 同样有 I/O 成本，必须谨慎安排。”</p>
+<h2 id="catalyst">第六幕：Catalyst——能够重写作战计划的军师</h2>
+<p>几个月之后。</p>
+<p>Spring 王国需要统计某个月的销售额。</p>
+<p>国王编写了一条 Spark SQL：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">SELECT</span>
+<span class="w">    </span><span class="n">user_id</span><span class="p">,</span>
+<span class="w">    </span><span class="k">SUM</span><span class="p">(</span><span class="n">amount</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">total_amount</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">orders</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">status</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;PAID&#39;</span>
+<span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">order_date</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="s1">&#39;2027-01-01&#39;</span>
+<span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">order_date</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="s1">&#39;2027-02-01&#39;</span>
+<span class="k">GROUP</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">user_id</span><span class="p">;</span>
+</code></pre></div>
+
+<p>国王问：</p>
+<p>“这条 SQL 会一字不差地按照我写的顺序执行吗？”</p>
+<p>Spark 笑了。</p>
+<p>“陛下，您现在见到的是我的首席军师。”</p>
+<p>“Catalyst。”</p>
+<h3 id="catalyst_1">一、Catalyst 的任务</h3>
+<p>Catalyst 是 Spark SQL 的查询优化框架。</p>
+<p>它会参与解析 SQL、分析语义、优化逻辑计划和选择物理执行方案。</p>
+<h3 id="spark-sql">Spark SQL 查询计划演化</h3>
+<p>SQL / DataFrame</p>
+<p>用户描述计算需求</p>
+<p>解析与分析</p>
+<p>生成并校验逻辑计划</p>
+<p>逻辑优化</p>
+<p>过滤下推、列裁剪等规则</p>
+<p>物理计划</p>
+<p>选择 Join、聚合等执行方式</p>
+<p>执行</p>
+<p>生成任务并在集群中运行</p>
+<h3 id="predicate-pushdown">二、谓词下推 Predicate Pushdown</h3>
+<p>假设我们有一百 TB 的 Parquet 文件。</p>
+<p>但只需要查询某个月的订单。</p>
+<p>如果先读取所有数据再过滤，代价非常高。</p>
+<p>Catalyst 和数据源读取层会尝试把过滤条件尽量下推。</p>
+<p>让存储读取阶段就过滤不需要的数据。</p>
+<p>“不过，具体能下推到什么程度，取决于数据源和表达式的支持情况。”</p>
+<p>“不是所有 WHERE 条件都能完全下推。”</p>
+<h3 id="column-pruning">三、列裁剪 Column Pruning</h3>
+<p>国王又问：</p>
+<p>“如果 orders 有五十个字段，但我只需要 user_id 和 amount 呢？”</p>
+<p>Spark 回答：</p>
+<p>“我们可以尝试只读取必要字段。”</p>
+<p>“对于 Parquet、ORC 等列式文件格式，这尤其有价值。”</p>
+<p>因为无需读取所有列的数据。</p>
+<h3 id="tungsten">四、Tungsten：执行层面的优化</h3>
+<p>Catalyst 主要负责查询计划优化。</p>
+<p>Tungsten 则代表 Spark 在底层执行效率方面的一系列优化工作，包括更加紧凑的内存表示、减少部分对象开销以及代码生成等机制。</p>
+<p>Spark 说道：</p>
+<p>“陛下，请记住。”</p>
+<p>“Catalyst 与 Tungsten 并不是两个互相排斥的查询引擎。”</p>
+<p>“前者偏向查询计划优化，后者偏向高效执行相关技术。”</p>
+<p>“现代 Spark SQL 的高性能来自多个层面的共同作用。”</p>
+<h2 id="join">第七幕：Join 之战——两张亿级表如何连接？</h2>
+<p>财政大臣又提出一道难题。</p>
+<p>“陛下，我们有两张表。”</p>
+<p>第一张：</p>
+<p><code>orders</code></p>
+<p>包含一亿条订单。</p>
+<p>第二张：</p>
+<p><code>users</code></p>
+<p>包含一百万个用户。</p>
+<p>“我们想将订单关联用户信息，再统计不同地区的销售额。”</p>
+<p>SQL 如下：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">SELECT</span>
+<span class="w">    </span><span class="n">u</span><span class="p">.</span><span class="n">city</span><span class="p">,</span>
+<span class="w">    </span><span class="k">SUM</span><span class="p">(</span><span class="n">o</span><span class="p">.</span><span class="n">amount</span><span class="p">)</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">orders</span><span class="w"> </span><span class="n">o</span>
+<span class="k">JOIN</span><span class="w"> </span><span class="n">users</span><span class="w"> </span><span class="n">u</span>
+<span class="w">    </span><span class="k">ON</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">user_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">u</span><span class="p">.</span><span class="n">id</span>
+<span class="k">GROUP</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">u</span><span class="p">.</span><span class="n">city</span><span class="p">;</span>
+</code></pre></div>
+
+<p>国王问：</p>
+<p>“Spark 会怎么执行 Join？”</p>
+<p>架构师回答：</p>
+<p>“主要取决于数据规模、Join 类型、数据分布、统计信息和配置。”</p>
+<p>“我们先讨论两种典型策略。”</p>
+<h3 id="broadcast-hash-join">一、Broadcast Hash Join：把小表送到每一座城</h3>
+<p>假设一边的数据经过过滤和压缩后只有 5 MB。</p>
+<p>而另一边有 100 GB。</p>
+<p>Spark 可以考虑把小表广播给参与计算的 Executor。</p>
+<p>“这样，大表不必仅仅为了这个 Join 而全部按照连接键重新洗牌。”</p>
+<h3 id="broadcast-join">Broadcast Join 简化结构</h3>
+<p>小表：用户维度数据</p>
+<p>广播到执行节点</p>
+<p>Executor 1</p>
+<p>大表分区</p>
+<p>小表副本</p>
+<p>Executor 2</p>
+<p>大表分区</p>
+<p>小表副本</p>
+<p>Executor 3</p>
+<p>大表分区</p>
+<p>小表副本</p>
+<p>“但广播小表也消耗 Driver、网络和 Executor 内存资源。”</p>
+<p>“如果小表并不小，强行广播可能造成内存压力甚至任务失败。”</p>
+<h3 id="sort-merge-join">二、Sort Merge Join：双方重新分区并排序</h3>
+<p>当两边数据都比较大，而且连接条件适合时，Spark 可能采用 Sort Merge Join。</p>
+<p>典型过程：</p>
+<p>双方根据 Join Key 进行 Shuffle。</p>
+<p>相同 Key 被分配到对应分区。</p>
+<p>各分区内进行排序。</p>
+<p>然后执行归并连接。</p>
+<p>“它通常适合较大规模的等值 Join。”</p>
+<p>“但是 Shuffle、排序和数据倾斜都可能产生较高成本。”</p>
+<h3 id="aqe">三、AQE：战斗过程中调整策略</h3>
+<p>国王继续问：</p>
+<p>“假设 Spark 在任务开始前估计 users 表有 100 MB。”</p>
+<p>“但实际运行时，经过过滤只有 2 MB。”</p>
+<p>“能不能临时改变计划？”</p>
+<p>Spark 答道：</p>
+<p>“这就是 AQE。”</p>
+<p>AQE（Adaptive Query Execution），自适应查询执行。</p>
+<p>它可以利用运行时获得的统计信息，对部分物理执行计划进行调整。</p>
+<p>例如：</p>
+<ul>
+<li>合并较小的 Shuffle 分区。</li>
+<li>在适合时调整 Join 策略。</li>
+<li>对支持的倾斜 Join 场景进行优化。</li>
+</ul>
+<p>Spark 相关优化依赖准确的统计信息、运行时数据与具体配置；即使提供了 Join Hint，也不能保证所有情况下都采用指定策略。</p>
+<p><a href="https://www.google.com/s2/favicons?domain=https://spark.apache.org\&amp;sz=32">image</a></p>
+<p>Spark 4.2.0 Documentation</p>
+<p>+1</p>
+<h2 id="_6">第八幕：数据倾斜再现——最强大的计算军团，也无法逃脱热点</h2>
+<p>战争持续了数日。</p>
+<p>Spark 帝国的计算节点大部分已经完成任务。</p>
+<p>可最后一个 Task 却迟迟无法结束。</p>
+<p>国王愤怒地问：</p>
+<p>“我们不是已经有了 AQE 吗？”</p>
+<p>“为什么还有数据倾斜？”</p>
+<p>Spark 回答：</p>
+<p>“AQE 可以优化部分倾斜场景，但不是所有数据倾斜都能自动解决。”</p>
+<h3 id="key">一、热点 Key</h3>
+<p>假设平台有一千万条订单。</p>
+<p>其中 30% 的订单属于同一个商家。</p>
+<p>如果按照 <code>merchant_id</code> 分组：</p>
+<div class="codehilite"><pre><span></span><code>df.groupBy(&quot;merchant_id&quot;).sum(&quot;amount&quot;)
+</code></pre></div>
+
+<p>这个热点商家可能让对应分区承担大量工作。</p>
+<p>尤其是在 Join 等操作中，如果热点 Key 两侧都有大量记录，甚至可能产生远超输入规模的中间结果。</p>
+<h3 id="_7">二、为什么增加分区数不一定有用？</h3>
+<p>国王说：</p>
+<p>“那就把分区数量从 200 改成 2000！”</p>
+<p>Spark 摇头。</p>
+<p>“如果同一个 Key 按 Hash 规则始终进入一个分区，那么单纯增加分区数量并不能把它拆开。”</p>
+<p>“不过，分区数量过少导致的普通负载不均衡，确实可能通过调整并行度改善。”</p>
+<h3 id="_8">三、热点加盐</h3>
+<p>对于可拆分聚合，可以考虑把热点 Key 拆成多个子 Key。</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>merchant_1001_0
+merchant_1001_1
+merchant_1001_2
+merchant_1001_3
+</code></pre></div>
+
+<p>第一阶段分别聚合。</p>
+<p>第二阶段再合并到：</p>
+<div class="codehilite"><pre><span></span><code>merchant_1001
+</code></pre></div>
+
+<p>“但加盐必须保持业务语义正确。”</p>
+<p>“并不是所有 Join 都能简单加盐。”</p>
+<p>“对于复杂场景，最好先借助 Spark UI 和执行计划确认倾斜位置，再设计优化策略。”</p>
+<h2 id="oom-128gb">第九幕：OOM 之夜——为什么 128GB 内存仍然不够？</h2>
+<p>深夜。</p>
+<p>Spark 帝国最昂贵的一台服务器突然发出警报。</p>
+<div class="codehilite"><pre><span></span><code>java.lang.OutOfMemoryError:
+Java heap space
+</code></pre></div>
+
+<p>国王震惊。</p>
+<p>“我们给它配了 128GB 内存！”</p>
+<p>“为什么还是 OOM？”</p>
+<p>Spark 冷静地回答：</p>
+<p>“陛下，机器物理内存、Executor 可用内存与某个 Task 真正能够使用的内存，并不是同一个概念。”</p>
+<p>“而且 OOM 可能发生在不同位置。”</p>
+<h3 id="driver-oom">一、Driver OOM</h3>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>all_orders = df.collect()
+</code></pre></div>
+
+<p>如果结果集非常大，全部收集到 Driver，就可能导致 Driver 内存不足。</p>
+<h3 id="executor-oom">二、Executor OOM</h3>
+<p>常见原因：</p>
+<ul>
+<li>单个分区过大。</li>
+<li>Shuffle 聚合数据结构占用大量内存。</li>
+<li>广播表过大。</li>
+<li>缓存过多。</li>
+<li>用户自定义函数创建大量对象。</li>
+<li>数据倾斜导致少数 Task 负载过高。</li>
+</ul>
+<h3 id="_9">三、容器内存超限</h3>
+<p>“陛下，Spark 还可能因为堆外内存、Python Worker 内存等消耗，使整个容器超过资源限制。”</p>
+<p>“这类故障未必会表现为 Java heap space。”</p>
+<p>“有时任务会因 Container 被资源管理器终止而失败。”</p>
+<h3 id="_10">四、正确排查流程</h3>
+<p>架构师制定了一套排查方案。</p>
+<p>首先定位故障发生在 Driver 还是 Executor。</p>
+<p>然后检查 Spark UI 中的 Stage、Task、Shuffle Read、Shuffle Write、Spill、GC、失败原因等指标。</p>
+<p>接着排查是否存在数据倾斜、异常大分区、错误广播或不合理缓存。</p>
+<p>最后再决定是否调整分区、Join 策略、缓存方案以及资源配置。</p>
+<p>“陛下，第一反应不应该永远是增加内存。”</p>
+<p>“增加内存有时只是掩盖根本问题。”</p>
+<h2 id="spark">第十幕：真正的工程实践——用 Spark 统计一亿条订单</h2>
+<p>国王终于提出一个现实问题。</p>
+<p>“我们学了这么多原理。”</p>
+<p>“现在，如果真的有一亿条订单，究竟应该怎么做？”</p>
+<p>架构师拿出一份 PySpark 程序。</p>
+<h3 id="parquet">第一步：读取 Parquet 数据</h3>
+<div class="codehilite"><pre><span></span><code>from pyspark.sql import SparkSessionfrom pyspark.sql.functions import (    col, sum as spark_sum, count)spark = SparkSession.builder \    .appName(&quot;OrderAnalytics&quot;) \    .getOrCreate()orders = spark.read.parquet(&quot;/data/orders&quot;)
+</code></pre></div>
+
+<p>“这里使用 Parquet，而不是直接在 Driver 中读取一亿条记录构造成 List。”</p>
+<p>“Parquet 是列式文件格式，比较适合许多批量分析任务。”</p>
+<h3 id="_11">第二步：过滤有效订单</h3>
+<div class="codehilite"><pre><span></span><code>valid_orders = orders.filter(    (col(&quot;status&quot;) == &quot;PAID&quot;) &amp;    (col(&quot;amount&quot;) &gt; 0))
+</code></pre></div>
+
+<p>“这里的过滤操作不会立即触发整个计算。”</p>
+<h3 id="_12">第三步：按用户聚合</h3>
+<div class="codehilite"><pre><span></span><code>user_stats = valid_orders.groupBy(&quot;user_id&quot;).agg(    spark_sum(&quot;amount&quot;).alias(&quot;total_amount&quot;),    count(&quot;*&quot;).alias(&quot;order_count&quot;))
+</code></pre></div>
+
+<p>“这里涉及按照 user_id 分组。”</p>
+<p>“通常会产生需要关注的 Shuffle。”</p>
+<h3 id="_13">第四步：写入结果</h3>
+<div class="codehilite"><pre><span></span><code>user_stats.write \    .mode(&quot;overwrite&quot;) \    .parquet(&quot;/output/user_stats&quot;)
+</code></pre></div>
+
+<p>“写入操作触发计算。”</p>
+<p>“如果路径和权限正确，Spark 会组织并行任务，把结果写入目标存储。”</p>
+<p>“但实际生产环境还需要考虑分区数、输出文件数量、写入幂等、任务重试和目录替换语义。”</p>
+<h3 id="_14">第五步：检查执行计划</h3>
+<div class="codehilite"><pre><span></span><code><span class="n">user_stats</span><span class="p">.</span><span class="k">explain</span><span class="p">(</span><span class="ss">&quot;formatted&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<p>架构师说道：</p>
+<p>“不要只看代码长什么样。”</p>
+<p>“要看 Spark 准备如何执行它。”</p>
+<p>例如是否存在：</p>
+<div class="codehilite"><pre><span></span><code>Scan parquet
+    ↓
+Filter
+    ↓
+HashAggregate (partial)
+    ↓
+Exchange (Shuffle)
+    ↓
+HashAggregate (final)
+    ↓
+Write
+</code></pre></div>
+
+<p>“这只是可能的典型计划示意。真实输出取决于具体 Spark 版本、数据类型、统计信息及配置。”</p>
+<p>国王点头。</p>
+<p>“所以 Spark 调优与 MySQL 调优有一个共同点。”</p>
+<p>“不能只盯着 SQL 或代码。”</p>
+<p>“还必须理解执行计划。”</p>
+<h2 id="_15">第十一幕：面试官的十道诘问</h2>
+<div class="quiz" data-quiz="5"></div>
+
+<h2 id="_16">尾声：永不停歇的数据之河</h2>
+<p>Spark 帝国最终赢得了这场批处理战争。</p>
+<p>它能够组织复杂 DAG，执行大规模 SQL 分析，复用中间数据，也能通过自适应机制优化部分计算。</p>
+<p>然而，国王 Java 发现了一个更加困难的问题。</p>
+<p>某一天，电商平台的运营总监突然来到王宫。</p>
+<p>“陛下，我们现在想知道——”</p>
+<p>“过去五分钟，每个直播间的成交金额。”</p>
+<p>“每秒钟各直播间的在线互动次数。”</p>
+<p>“某个用户刚完成支付后，能否在几秒内更新实时排行榜。”</p>
+<p>国王想了想。</p>
+<p>“我们不是有 Spark 吗？”</p>
+<p>架构师点头。</p>
+<p>“Spark 当然也具备流处理能力，包括 Structured Streaming。”</p>
+<p>“不过，我们现在面对的是一种与离线批处理不同的挑战。”</p>
+<p>“数据不是昨天已经收集好的一个文件。”</p>
+<p>“而是无时无刻不在产生。”</p>
+<p>“它像一条河。”</p>
+<p>“一秒、两秒、三秒……”</p>
+<p>“永远不会停止。”</p>
+<p>国王问：</p>
+<p>“那我们应该怎么处理一条永远不会结束的数据流？”</p>
+<p>就在这时，东方的天空中出现了一道巨大的红色光芒。</p>
+<p>一名传令兵冲进大殿。</p>
+<p>“陛下！”</p>
+<p>“有一个新的分布式计算帝国正在崛起！”</p>
+<p>“他们宣称能够持续处理实时数据，并通过状态管理、Checkpoint 与事件时间机制，应对复杂的流式计算！”</p>
+<p>“他们叫什么名字？”</p>
+<p>传令兵缓缓吐出一个名字。</p>
+<p>Apache Flink。</p>
+<h2 id="kafka-flink">下一章：《实时之河——Kafka 与 Flink 的崛起》</h2>
+<p>第六章将从直播间实时成交统计开始，讲解整套实时大数据架构。</p>
+<p>故事会重点展开 Kafka 的 Topic、Partition、Broker、Consumer Group、Offset、ISR、消息顺序与可靠性，以及 Flink 的 DataStream、Operator、并行度、Event Time、Watermark、Window、State、Checkpoint、Savepoint 和端到端 Exactly-Once 语义。</p>
+<p>最终，我们会把 Java Spring Boot + MySQL + Kafka + Flink + Redis + ClickHouse 组合成一套完整的直播业务实时数据处理系统，并分析高并发交易与实时大数据计算如何协同工作。</p>
+<p>《数据帝国》第五章·完</p></article><section class="practice"><h2>把原理放进实验</h2><p>调整参数，观察系统如何变化。所有实验均在当前浏览器中运行。</p><a href="practice.html">查看全部交互实验 →</a> · <a href="editorial.html">内容整理与技术校正 →</a></section><nav class="chapter-nav" aria-label="上下章"><a href="chapter-04.html">← 上一章<span>分布式大陆——Hadoop 与 MapReduce 的诞生</span></a><a href="chapter-06.html">下一章 →<span>实时之河——Kafka 与 Flink 的崛起</span></a></nav></main></div><footer><a href="index.html">数据帝国</a><p>在故事中理解系统，在实验中观察原理。<span>现有 8 章 · 第 9 章待续</span></p><a href="https://github.com/wupzl/data-empire-reader">项目源码 ↗</a></footer>
+<dialog id="search-dialog" aria-labelledby="search-title"><div class="search-top"><h2 id="search-title">在帝国里寻找答案</h2><button id="search-close" aria-label="关闭搜索">关闭 ×</button></div><label for="query">关键词或代码，例如 Redis、背压、Checkpoint</label><input id="query" type="search" autocomplete="off" placeholder="搜索全书正文…"><p id="search-status" role="status">输入关键词，搜索 8 章内容</p><div id="search-results"></div></dialog></body></html>

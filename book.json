@@ -1,0 +1,41 @@
+{
+  "chapters": [
+    {
+      "title": "帝国崩溃之夜——当一万人同时敲响城门",
+      "topics": "并发与并行 · QPS / RT · 缓存与库存"
+    },
+    {
+      "title": "Redis 要塞——十万请求与最后一张优惠券",
+      "topics": "Lua · 消息可靠性 · 幂等 · 令牌桶"
+    },
+    {
+      "title": "亿级数据之灾——MySQL 巨城的极限",
+      "topics": "B+ 树 · 深分页 · 分片 · OLTP / OLAP"
+    },
+    {
+      "title": "分布式大陆——Hadoop 与 MapReduce 的诞生",
+      "topics": "HDFS · MapReduce · Shuffle · YARN"
+    },
+    {
+      "title": "Spark 崛起——内存计算与 DAG 战争",
+      "topics": "RDD · DAG · Spark SQL · 执行计划"
+    },
+    {
+      "title": "实时之河——Kafka 与 Flink 的崛起",
+      "topics": "Kafka · Flink · 事件时间 · Watermark"
+    },
+    {
+      "title": "背压风暴——千万级实时系统的生死线",
+      "topics": "背压 · Checkpoint · 状态 · 热点治理"
+    },
+    {
+      "title": "千万级帝国——从零设计真正的高并发直播系统",
+      "topics": "容量规划 · 长连接 · 高可用 · 可观测性"
+    }
+  ],
+  "next": {
+    "title": "数据仓库之城",
+    "subtitle": "从混乱日志到可信指标"
+  },
+  "source_sha256": "99bcf4cd6074d9d6485d21694d6fd8198089f3a8819015336a906205662fe278"
+}

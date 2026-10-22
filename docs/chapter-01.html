@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="description" content="数据帝国：以 Java 后端工程师的视角，在小说和交互实验中理解高并发与大数据。现有 8 章，第 9 章待续。"><title>帝国崩溃之夜——当一万人同时敲响城门 · 数据帝国</title><script>try{document.documentElement.dataset.theme=localStorage.getItem('de-theme')||'light';document.documentElement.style.setProperty('--reader-size',Math.max(14,Math.min(26,Number(localStorage.getItem('de-size'))||18))+'px')}catch(e){}</script><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="shelf-nav.css"><link rel="stylesheet" href="labs.css"><script src="app.js" defer></script><script src="labs.js" defer></script><script src="quizzes.js" defer></script></head>
+<body data-chapter="1" data-count="8"><a class="skip" href="#main">跳到正文</a><div id="progress" aria-hidden="true"></div><header class="topbar"><a class="brand" href="index.html"><span class="emblem" aria-hidden="true">D<span>↗</span></span><span>数据帝国<small>THE DATA EMPIRE</small></span></a><nav class="shelf-nav" aria-label="学习项目导航"><a class="shelf-home" href="/">← 学习书架</a><details class="shelf-switch"><summary>切换项目 ▾</summary><div class="shelf-menu"><a href="/pytorch-apprentice/">PyTorch：炼金术士的学徒</a><a href="/ai-era-reader/">AI 纪元</a><a href="/data-empire-reader/" aria-current="true">数据帝国</a></div></details></nav><div class="controls"><button id="search-open" aria-label="搜索全书">搜索 <kbd>/</kbd></button><button id="smaller" aria-label="缩小字号">A−</button><button id="larger" aria-label="增大字号">A＋</button><button id="theme" aria-label="切换深浅色主题">◐</button></div></header>
+<div class="reader-layout"><aside class="sidebar"><p class="eyebrow">THE EMPIRE’S JOURNEY</p><nav aria-label="全书章节"><a class="current" href="chapter-01.html" aria-current="page"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><details class="local-toc" open><summary>本章线索</summary><div class="toc">
+<ul>
+<li><a href="#_1">第一幕：一秒钟，一万道命令</a></li>
+<li><a href="#_2">第二幕：什么是高并发？</a></li>
+<li><a href="#qpstps-rt">第三幕：QPS、TPS 与 RT</a></li>
+<li><a href="#_4">第四幕：一条神秘公式——利特尔法则</a></li>
+<li><a href="#_5">帝国并发实验室</a></li>
+<li><a href="#_6">第五幕：第一次灾难——线程耗尽</a></li>
+<li><a href="#_7">第六幕：增加服务器，就能解决一切吗？</a></li>
+<li><a href="#redis">第七幕：Redis——建立帝国的高速粮仓</a></li>
+<li><a href="#_9">第八幕：库存战争——最后一件商品卖给了两个人</a></li>
+<li><a href="#redis_1">第二章预告：《Redis 要塞——十万请求与最后一张优惠券》</a></li>
+</ul>
+</div>
+</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 01 <span>/ 08 · 约 15 分钟</span></p><h1>帝国崩溃之夜——当一万人同时敲响城门</h1><p class="topics">并发与并行 · QPS / RT · 缓存与库存</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="current" href="chapter-01.html" aria-current="page"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
+<ul>
+<li><a href="#_1">第一幕：一秒钟，一万道命令</a></li>
+<li><a href="#_2">第二幕：什么是高并发？</a></li>
+<li><a href="#qpstps-rt">第三幕：QPS、TPS 与 RT</a></li>
+<li><a href="#_4">第四幕：一条神秘公式——利特尔法则</a></li>
+<li><a href="#_5">帝国并发实验室</a></li>
+<li><a href="#_6">第五幕：第一次灾难——线程耗尽</a></li>
+<li><a href="#_7">第六幕：增加服务器，就能解决一切吗？</a></li>
+<li><a href="#redis">第七幕：Redis——建立帝国的高速粮仓</a></li>
+<li><a href="#_9">第八幕：库存战争——最后一件商品卖给了两个人</a></li>
+<li><a href="#redis_1">第二章预告：《Redis 要塞——十万请求与最后一张优惠券》</a></li>
+</ul>
+</div>
+</details><article><blockquote>
+<p>阅读提示：并发数按利特尔法则估算时需要稳态及一致的统计边界；在途请求数并不等于线程数。</p>
+</blockquote>
+<p>本书将以 Java 后端工程师的视角，从零开始讲解高并发与大数据。故事中的帝国、士兵、仓库与信使，分别对应服务器、线程、数据库与消息队列。我们不仅要知道技术是什么，更要理解它为什么出现、解决了什么问题，以及什么时候反而不应该使用它。</p>
+<h2 id="_1">第一幕：一秒钟，一万道命令</h2>
+<p>公元 2026 年，数据大陆。</p>
+<p>在大陆中央，有一个名为 Spring 王国 的小国。</p>
+<p>国王名叫 Java，宰相名叫 Spring Boot。</p>
+<p>王国有一座巨大的交易城，名为 MySQL。</p>
+<p>城内存放着所有臣民的账户、订单、商品与库存。</p>
+<p>每天，王国都会收到来自各地的请求。</p>
+<p>有的请求是查询商品。</p>
+<p>有的请求是创建订单。</p>
+<p>有的请求是支付。</p>
+<p>有的请求是领取优惠券。</p>
+<p>王国的运转十分稳定。</p>
+<p>直到某一天。</p>
+<p>一位商人找到国王。</p>
+<p>“陛下，我们准备举行一场史无前例的促销活动。”</p>
+<p>“预计有多少人参加？”国王问。</p>
+<p>“一百万人。”</p>
+<p>国王并不在意。</p>
+<p>“一百万人又如何？我们的数据库能够存储上亿条记录。”</p>
+<p>商人摇了摇头。</p>
+<p>“陛下，我说的不是一百万人注册。”</p>
+<p>“而是活动开始时，可能有一万人在同一秒内发起请求。”</p>
+<p>宫殿瞬间安静。</p>
+<p>宰相 Spring Boot 脸色一变。</p>
+<p>“陛下，这不是存储问题。”</p>
+<p>“这是战争。”</p>
+<p><img alt="故事场景插图" src="https://images.openai.com/static-rsc-4/-HyjGAifrILHDofxXvoU5tvZWkYVkpgMs4T6gctvbkpgegiZiywnSc_XsfAhkEXDuUk_cfoiy28uqfAQBgLzGyZBhdaJuPw_Xha1x2PiYNbiREtynRl7Cr7jAiZpst57eA6AlLV1S13wShSwPP9jTIdC6fYD24bi10iUSHLdMws?purpose=inline" /></p>
+<p><em>图片来源：9 исторических фильмов о войнах, осадах городов и крупных сражениях / Кино и сериалы / iXBT Live</em></p>
+<p><a href="https://www.ixbt.com/live/movie/9-istoricheskih-filmov-o-voynah-osadah-gorodov-i-krupnyh-srazheniyah.html?utm_source=chatgpt.com">ixbt.com</a></p>
+<h2 id="_2">第二幕：什么是高并发？</h2>
+<p>国王召集了帝国所有工程师。</p>
+<p>首席架构师拿出一张图纸。</p>
+<p>“陛下，您需要先理解两个概念。”</p>
+<p>“并发（Concurrency）与并行（Parallelism）。”</p>
+<p>他在地上画出两座城门。</p>
+<p>并发：一个守卫交替处理多个请求</p>
+<p>通过调度交替推进多个任务，不代表它们在同一瞬间都在执行。</p>
+<p>并行：多个守卫同时处理不同请求</p>
+<p>多个处理核心真正同时执行任务。并发系统可以包含并行执行。</p>
+<p>架构师解释道：</p>
+<p>“假设一名士兵需要十秒钟处理一份公文。”</p>
+<p>“如果十份公文接连送来，他可以在不同公文之间切换，这叫并发。”</p>
+<p>“如果安排十名士兵，同时处理十份公文，这叫并行。”</p>
+<p>国王思索片刻。</p>
+<p>“那么，高并发就是有很多人在同一时间请求我们的系统？”</p>
+<p>“基本正确。但是还需要更加精确。”</p>
+<p>“我们需要衡量系统究竟承受多大的压力。”</p>
+<p>架构师写下三个指标。</p>
+<p>QPS、TPS、RT。</p>
+<h2 id="qpstps-rt">第三幕：QPS、TPS 与 RT</h2>
+<p>架构师指向城门。</p>
+<p>“陛下，假设一秒钟内，有 10,000 次查询抵达王国。”</p>
+<p>“那么我们的查询吞吐量就是 10,000 QPS。”</p>
+<p>QPS（Queries Per Second） 通常表示每秒查询请求数，Web 系统中也常被用来描述请求吞吐量，但不同监控系统对 query 的定义可能不同。</p>
+<p>“如果每秒成功完成 3,000 笔交易呢？”</p>
+<p>“那么在每笔交易被定义为一个业务事务的前提下，TPS 就是 3,000。”</p>
+<p>TPS（Transactions Per Second） 表示每秒处理的事务数。</p>
+<p>注意，一笔业务交易不一定等于一次 HTTP 请求，也不一定等于一次数据库事务。</p>
+<p>国王又问：</p>
+<p>“如果有些人等了很长时间才得到回应，我们又该如何衡量？”</p>
+<p>“这就要看 RT。”</p>
+<p>RT（Response Time） 是请求响应时间，也称延迟。</p>
+<p>一名臣民请求查看商品：</p>
+<ul>
+<li>20ms 返回：体验很好。</li>
+<li>200ms 返回：通常仍然比较流畅。</li>
+<li>2s 返回：可能已经明显感觉到等待。</li>
+<li>10s 返回：用户可能直接放弃。</li>
+</ul>
+<p>这些只是直观示例，实际性能目标取决于业务场景、网络与设备。</p>
+<p>架构师补充：</p>
+<p>“还有一个指标比平均响应时间更容易暴露问题。”</p>
+<p>“叫作 P99。”</p>
+<p>国王皱眉。</p>
+<p>“什么意思？”</p>
+<p>“假设我们记录了 10,000 个请求的响应时间并排序。”</p>
+<p>“P99 约表示 99% 的请求响应时间不超过该数值，还有约 1% 更慢。”</p>
+<p>“如果平均 RT 是 100ms，但 P99 达到 5 秒，说明仍然有不少用户会遭遇严重延迟。”</p>
+<h3 id="_3">王国第一次压力测试</h3>
+<p>吞吐量</p>
+<p><strong>5,000</strong></p>
+<p>QPS</p>
+<p>平均 RT</p>
+<p><strong>120 ms</strong></p>
+<p>请求响应时间</p>
+<p>P99</p>
+<p><strong>2,000 ms</strong></p>
+<p>长尾延迟</p>
+<p>错误率</p>
+<p><strong>1.5%</strong></p>
+<p>请求失败比例</p>
+<p>虚构的压测数据，用于说明吞吐量与延迟需要结合观察。</p>
+<p>“陛下，仅仅提高 QPS 并不意味着系统一定更好。”</p>
+<p>“如果一秒可以接收十万个请求，但其中八万个超时，那么这种繁荣毫无意义。”</p>
+<h2 id="_4">第四幕：一条神秘公式——利特尔法则</h2>
+<p>国王终于明白了。</p>
+<p>然而，他又提出一个问题。</p>
+<p>“假设王国一秒能够完成 1,000 个请求，每个请求平均耗时 0.2 秒，那么系统里平均同时有多少个请求？”</p>
+<p>架构师微微一笑。</p>
+<p>“这就是高并发领域著名的 Little's Law（利特尔法则）。”</p>
+<p>他在黑板上写道：</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>L</mi><mo>=</mo><mi>λ</mi><mi>W</mi></mrow><annotation encoding="application/x-tex"> L=\lambda W </annotation></semantics></math></span></p>
+<p>其中：</p>
+<ul>
+<li><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>L</mi></mrow><annotation encoding="application/x-tex">L</annotation></semantics></math></span>：系统内平均请求数量。</li>
+<li><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>λ</mi></mrow><annotation encoding="application/x-tex">\lambda</annotation></semantics></math></span>：长期平均完成吞吐率。</li>
+<li><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi></mrow><annotation encoding="application/x-tex">W</annotation></semantics></math></span>：平均请求在系统内停留的时间。</li>
+</ul>
+<p>代入数字：</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>L</mi><mo>=</mo><mn>1000</mn><mo>×</mo><mn>0.2</mn><mo>=</mo><mn>200</mn></mrow><annotation encoding="application/x-tex"> L=1000\times0.2=200 </annotation></semantics></math></span></p>
+<p>“陛下，在符合稳态等适用条件时，系统中平均存在约 200 个尚未完成的请求。”</p>
+<p>国王恍然大悟。</p>
+<p>“也就是说，如果请求越来越慢，即使吞吐量不变，系统内积压的请求也可能越来越多？”</p>
+<p>“正是如此！”</p>
+<p>“这就是为什么高并发系统特别害怕响应时间恶化。”</p>
+<h2 id="_5">帝国并发实验室</h2>
+<div class="lab" data-lab="little"></div>
+
+<h2 id="_6">第五幕：第一次灾难——线程耗尽</h2>
+<p>促销当天终于到来。</p>
+<p>上午十点整。</p>
+<p>“活动开始！”</p>
+<p>一万名臣民同时冲向城门。</p>
+<p>第一秒。</p>
+<p>城门守卫 Tomcat 还在努力工作。</p>
+<p>第二秒。</p>
+<p>大量请求排队。</p>
+<p>第三秒。</p>
+<p>有些请求迟迟得不到响应。</p>
+<p>监控平台开始报警。</p>
+<p>“陛下！线程池的工作线程已经全部占用！”</p>
+<p>“数据库连接池也快耗尽了！”</p>
+<p>“请求超时数量正在快速增加！”</p>
+<p>国王愤怒地质问：</p>
+<p>“为什么会这样？”</p>
+<p>架构师走进大殿。</p>
+<p>“因为我们的处理模式存在瓶颈。”</p>
+<p>他画出一段 Java 代码：</p>
+<div class="codehilite"><pre><span></span><code><span class="nd">@GetMapping</span><span class="p">(</span><span class="s">&quot;/product/{id}&quot;</span><span class="p">)</span>
+<span class="kd">public</span><span class="w"> </span><span class="n">Product</span><span class="w"> </span><span class="nf">getProduct</span><span class="p">(</span><span class="nd">@PathVariable</span><span class="w"> </span><span class="n">Long</span><span class="w"> </span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">productService</span><span class="p">.</span><span class="na">getById</span><span class="p">(</span><span class="n">id</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>“陛下，假设这个接口使用传统 Spring MVC 阻塞式处理。”</p>
+<p>“一名平台线程接到请求后，需要等待数据库查询完成。”</p>
+<p>“数据库没返回时，这名线程也许并没有使用 CPU 进行计算，但它仍然被占用。”</p>
+<p>“当请求持续涌入，线程池达到上限，后续请求就需要等待或被拒绝。”</p>
+<p>国王问：</p>
+<p>“那我们增加线程不就行了？”</p>
+<p>“不一定。”</p>
+<p>“线程不是免费的。”</p>
+<p>“线程需要内存、调度资源；线程过多还可能增加上下文切换开销。”</p>
+<p>“更关键的是，如果真正的瓶颈在数据库，增加线程可能只会让更多请求挤到数据库门口。”</p>
+<p>架构师在城墙上写下第一条法则：</p>
+<blockquote>
+<p>高并发优化不是无止境地增加线程，而是识别瓶颈、减少等待、控制资源消耗，并让系统在过载时仍然可控。</p>
+</blockquote>
+<h2 id="_7">第六幕：增加服务器，就能解决一切吗？</h2>
+<p>国王不愿放弃。</p>
+<p>“既然一座城门不够，那就建十座！”</p>
+<p>十台应用服务器被迅速部署。</p>
+<p>架构师在城门前设立一座新的指挥塔。</p>
+<p>名字叫作：</p>
+<p>Nginx。</p>
+<h3 id="_8">帝国的第一次横向扩容</h3>
+<p>大量客户端请求</p>
+<p>Nginx 负载均衡</p>
+<p>分发请求、反向代理、健康检查等</p>
+<p>Java 1</p>
+<p>Java 2</p>
+<p>Java 3</p>
+<p>MySQL 数据库</p>
+<p>共享持久化存储</p>
+<p>国王满意地点头。</p>
+<p>“现在是不是能够承受十倍流量了？”</p>
+<p>架构师摇头。</p>
+<p>“未必。”</p>
+<p>“应用服务器增加十倍，不意味着数据库吞吐量增加十倍。”</p>
+<p>“原本一千个请求访问数据库，现在可能变成一万个。”</p>
+<p>“数据库反而可能更快崩溃。”</p>
+<p>“而且，如果服务实例内部保存了用户登录状态或关键业务状态，扩容之后还可能出现状态不一致的问题。”</p>
+<p>“所以我们必须继续改革。”</p>
+<h2 id="redis">第七幕：Redis——建立帝国的高速粮仓</h2>
+<p>架构师带着国王来到 MySQL 城外。</p>
+<p>“陛下，我们每一次查商品，都要进入 MySQL 城。”</p>
+<p>“但很多商品数据并不会频繁变化。”</p>
+<p>“为什么不把经常访问的数据放到城门外？”</p>
+<p>国王问：</p>
+<p>“城门外？”</p>
+<p>“不错。建立一个高速粮仓。”</p>
+<p>“它叫作 Redis。”</p>
+<p><img alt="故事场景插图" src="https://images.openai.com/static-rsc-4/2D6PtRnxXPTPzvmeeYktZs-w7m_qpLpBEagm48YlwPEkLr0w5mapzLz5I0YwG_uAI2Leg4WaE-7YkZEs5BMOfwqQ7lINM9gKgsmWlpnuoF9PmpjrjxkcYTVRw5_RiQjBXuVpiZ5_TB7vAym3u8MaI-xyeSLZDSRzfDl39W93fy0?purpose=inline" /></p>
+<p><em>图片来源：Dwarven Underground City - 4K Ultra HD Fantasy Artwork by robokoboto</em></p>
+<p><a href="https://wall.alphacoders.com/big.php?i=1380993\&amp;utm_source=chatgpt.com">wall.alphacoders.com</a></p>
+<p>原本查询一件商品需要：</p>
+<div class="codehilite"><pre><span></span><code>用户
+  ↓
+Spring Boot
+  ↓
+MySQL
+  ↓
+返回商品
+</code></pre></div>
+
+<p>现在：</p>
+<div class="codehilite"><pre><span></span><code>用户
+  ↓
+Spring Boot
+  ↓
+Redis
+  ├─ 命中 → 直接返回
+  └─ 未命中 → 查询 MySQL
+                 ↓
+             写入 Redis
+                 ↓
+               返回
+</code></pre></div>
+
+<p>“陛下，假设有一万次商品查询，其中九千五百次能够直接从 Redis 返回。”</p>
+<p>“那么进入 MySQL 的查询就会显著减少。”</p>
+<p>国王眼前一亮。</p>
+<p>“这就是缓存！”</p>
+<p>“没错。”</p>
+<p>但架构师话锋一转。</p>
+<p>“缓存不是免费的，我们会遇到新的敌人。”</p>
+<p>“什么敌人？”</p>
+<p>“缓存穿透、缓存击穿、缓存雪崩和缓存一致性。”</p>
+<p>国王沉默。</p>
+<p>“看来这个世界远比想象中复杂。”</p>
+<h2 id="_9">第八幕：库存战争——最后一件商品卖给了两个人</h2>
+<p>傍晚，帝国迎来了更严重的危机。</p>
+<p>有一件限量商品。</p>
+<p>库存只有一件。</p>
+<p>两名顾客，张三和李四，同时发起购买请求。</p>
+<p>程序原本这样写：</p>
+<div class="codehilite"><pre><span></span><code>int stock = queryStock(productId);
+
+if (stock &gt; 0) {
+    deductStock(productId);
+    createOrder(userId, productId);
+}
+</code></pre></div>
+
+<p>张三查询库存。</p>
+<p>结果：1。</p>
+<p>李四查询库存。</p>
+<p>结果：1。</p>
+<p>张三通过检查。</p>
+<p>李四也通过检查。</p>
+<p>最后，两人都尝试扣减并创建订单。</p>
+<p>“陛下！”</p>
+<p>库存官员冲进王宫。</p>
+<p>“发生了超卖风险！”</p>
+<p>国王震怒：</p>
+<p>“库存明明只有一件，为什么两个人都能通过检查？”</p>
+<p>架构师解释：</p>
+<p>“因为 查询与扣减并不是一个原子操作。”</p>
+<p>“多个线程同时执行时，它们可能看到相同的旧数据。”</p>
+<p>“这叫作典型的竞态条件（Race Condition）。”</p>
+<p>“该如何解决？”</p>
+<p>“方法不止一种。”</p>
+<p>“我们可以使用数据库条件更新、事务与锁。”</p>
+<p>“也可以在满足条件时使用 Redis Lua 脚本执行原子校验与扣减，再通过消息队列完成后续履约。”</p>
+<p>他先写下最简单的数据库方案：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">UPDATE</span><span class="w"> </span><span class="n">product</span>
+<span class="k">SET</span><span class="w"> </span><span class="n">stock</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stock</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1001</span>
+<span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">stock</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+</code></pre></div>
+
+<p>“这条 SQL 中，检查库存与扣减库存由同一条条件更新完成。”</p>
+<p>“如果影响行数为 1，表示成功扣减。”</p>
+<p>“如果影响行数为 0，说明库存不足，或者商品不存在。”</p>
+<p>“对于单条库存记录，这已经能够防止并发扣减导致库存变成负数。”</p>
+<p>国王疑惑：</p>
+<p>“那是不是不需要 Redis 了？”</p>
+<p>“如果流量和业务复杂度不高，确实没必要为了高并发而强行引入 Redis。”</p>
+<p>“但如果一秒有数十万次抢购请求直接争夺同一行库存，数据库锁竞争可能会成为瓶颈。”</p>
+<p>“我们就需要更加复杂的方案。”</p>
+<h2 id="redis_1">第二章预告：《Redis 要塞——十万请求与最后一张优惠券》</h2>
+<p><img alt="故事场景插图" src="https://images.openai.com/static-rsc-4/bqEYwcft2iPcYKXEhBzd8rP8RNE0N3oL3HdoFWXSeVJIZuDNi76OkCjQMdMBhX3phH2qzNc4TXRwM5vWmYkxN2SnrReAe9l_tQXZMaFIrNem9DS3PZ6UJ2xkWcRPNroC2UyRoZ0_F87OI_LcT8moGcOKMqnfWbqROovzTakCOxk?purpose=inline" /></p>
+<p><em>图片来源：Privacy Quest</em></p>
+<p><a href="https://play.compliancedetective.com/?utm_source=chatgpt.com">play.compliancedetective.com</a></p>
+<p>下一章，帝国将迎来真正的秒杀战争。</p>
+<p>我们会继续保持完整小说叙事，同时深入讲解：</p>
+<ol>
+<li>高并发秒杀架构：为什么 10 万 QPS 不应该全部进入 MySQL。</li>
+<li>Redis 库存扣减：<code>DECR</code>、Lua 原子操作、为什么 <code>GET + SET</code> 不安全。</li>
+<li>分布式锁：SET NX、锁过期、误删、Redisson，以及什么时候根本不需要锁。</li>
+<li>幂等性：如何防止同一用户重复领取优惠券。</li>
+<li>RabbitMQ 削峰填谷：为什么消息队列不能凭空提升数据库处理能力。</li>
+<li>异步履约：消息丢失、重复消费、事务一致性、补偿机制。</li>
+<li>千万级数据挑战：当订单量达到一亿条，索引、分页、分库分表为何逐渐出现。</li>
+</ol>
+<p>而在未来的大数据篇，故事将从“如何同时处理大量请求”，转向“如何处理海量数据”，逐步引出 Hadoop、HDFS、MapReduce、Spark、Flink、Kafka、Hive、ClickHouse、OLAP、实时计算，以及 Lambda/Kappa 架构。</p>
+<p>两条主线的核心区别是：</p>
+<ul>
+<li>高并发：大量请求同时到来，系统如何保证吞吐量、延迟、正确性和可用性？</li>
+<li>大数据：数据规模巨大或持续高速产生，系统如何高效存储、计算、分析并提取价值？</li>
+</ul>
+<p>二者经常结合，但不是一回事：千万 QPS 的简单读取业务未必需要 Spark；数百 TB 的离线数据分析也未必涉及高并发请求。</p>
+<p>《数据帝国》第一章·完</p></article><section class="practice"><h2>把原理放进实验</h2><p>调整参数，观察系统如何变化。所有实验均在当前浏览器中运行。</p><a href="practice.html">查看全部交互实验 →</a> · <a href="editorial.html">内容整理与技术校正 →</a></section><nav class="chapter-nav" aria-label="上下章"><a href="index.html">← 全书目录<span>回到故事起点</span></a><a href="chapter-02.html">下一章 →<span>Redis 要塞——十万请求与最后一张优惠券</span></a></nav></main></div><footer><a href="index.html">数据帝国</a><p>在故事中理解系统，在实验中观察原理。<span>现有 8 章 · 第 9 章待续</span></p><a href="https://github.com/wupzl/data-empire-reader">项目源码 ↗</a></footer>
+<dialog id="search-dialog" aria-labelledby="search-title"><div class="search-top"><h2 id="search-title">在帝国里寻找答案</h2><button id="search-close" aria-label="关闭搜索">关闭 ×</button></div><label for="query">关键词或代码，例如 Redis、背压、Checkpoint</label><input id="query" type="search" autocomplete="off" placeholder="搜索全书正文…"><p id="search-status" role="status">输入关键词，搜索 8 章内容</p><div id="search-results"></div></dialog></body></html>

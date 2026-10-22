@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="description" content="数据帝国：以 Java 后端工程师的视角，在小说和交互实验中理解高并发与大数据。现有 8 章，第 9 章待续。"><title>分布式大陆——Hadoop 与 MapReduce 的诞生 · 数据帝国</title><script>try{document.documentElement.dataset.theme=localStorage.getItem('de-theme')||'light';document.documentElement.style.setProperty('--reader-size',Math.max(14,Math.min(26,Number(localStorage.getItem('de-size'))||18))+'px')}catch(e){}</script><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="shelf-nav.css"><link rel="stylesheet" href="labs.css"><script src="app.js" defer></script><script src="labs.js" defer></script><script src="quizzes.js" defer></script></head>
+<body data-chapter="4" data-count="8"><a class="skip" href="#main">跳到正文</a><div id="progress" aria-hidden="true"></div><header class="topbar"><a class="brand" href="index.html"><span class="emblem" aria-hidden="true">D<span>↗</span></span><span>数据帝国<small>THE DATA EMPIRE</small></span></a><nav class="shelf-nav" aria-label="学习项目导航"><a class="shelf-home" href="/">← 学习书架</a><details class="shelf-switch"><summary>切换项目 ▾</summary><div class="shelf-menu"><a href="/pytorch-apprentice/">PyTorch：炼金术士的学徒</a><a href="/ai-era-reader/">AI 纪元</a><a href="/data-empire-reader/" aria-current="true">数据帝国</a></div></details></nav><div class="controls"><button id="search-open" aria-label="搜索全书">搜索 <kbd>/</kbd></button><button id="smaller" aria-label="缩小字号">A−</button><button id="larger" aria-label="增大字号">A＋</button><button id="theme" aria-label="切换深浅色主题">◐</button></div></header>
+<div class="reader-layout"><aside class="sidebar"><p class="eyebrow">THE EMPIRE’S JOURNEY</p><nav aria-label="全书章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="current" href="chapter-04.html" aria-current="page"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><details class="local-toc" open><summary>本章线索</summary><div class="toc">
+<ul>
+<li><a href="#tb">第一幕：一百 TB 的秘密档案</a></li>
+<li><a href="#hadoop">第二幕：Hadoop 帝国——三大军团</a></li>
+<li><a href="#hadoop_1">Hadoop 核心架构</a></li>
+<li><a href="#hdfs">第三幕：HDFS——将巨大的卷宗切成碎片</a></li>
+<li><a href="#namenode">第四幕：NameNode——掌管全帝国地图的总指挥</a></li>
+<li><a href="#_2">第五幕：副本军团——一台服务器坏了怎么办？</a></li>
+<li><a href="#mapreduce">第六幕：MapReduce——一千名士兵，如何完成同一项任务？</a></li>
+<li><a href="#wordcount">WordCount 计算实验</a></li>
+<li><a href="#shuffle_1">第七幕：Shuffle 战争——为什么数据交换如此昂贵？</a></li>
+<li><a href="#_6">第八幕：数据倾斜——为什么九十九名士兵已经休息，最后一人还在拼命？</a></li>
+<li><a href="#_7">数据倾斜模拟</a></li>
+<li><a href="#_9">第九幕：容错战争——执行一半，服务器突然死亡</a></li>
+<li><a href="#yarn">第十幕：YARN 指挥部——谁来分配一千台机器？</a></li>
+<li><a href="#inputsplit">第十一幕：真正的分布式工程——数据本地性与 InputSplit</a></li>
+<li><a href="#java-mapreduce">第十二幕：Java 工程师的试炼——亲手写一个 MapReduce</a></li>
+<li><a href="#mapreduce_2">第十三幕：为什么 MapReduce 最终遇到了瓶颈？</a></li>
+<li><a href="#_15">第十四幕：首席架构师考核——八道面试题</a></li>
+<li><a href="#_16">尾声：一道来自东方的火光</a></li>
+<li><a href="#spark-dag">下一章：《Spark 崛起——内存计算与 DAG 战争》</a></li>
+</ul>
+</div>
+</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 04 <span>/ 08 · 约 39 分钟</span></p><h1>分布式大陆——Hadoop 与 MapReduce 的诞生</h1><p class="topics">HDFS · MapReduce · Shuffle · YARN</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="current" href="chapter-04.html" aria-current="page"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
+<ul>
+<li><a href="#tb">第一幕：一百 TB 的秘密档案</a></li>
+<li><a href="#hadoop">第二幕：Hadoop 帝国——三大军团</a></li>
+<li><a href="#hadoop_1">Hadoop 核心架构</a></li>
+<li><a href="#hdfs">第三幕：HDFS——将巨大的卷宗切成碎片</a></li>
+<li><a href="#namenode">第四幕：NameNode——掌管全帝国地图的总指挥</a></li>
+<li><a href="#_2">第五幕：副本军团——一台服务器坏了怎么办？</a></li>
+<li><a href="#mapreduce">第六幕：MapReduce——一千名士兵，如何完成同一项任务？</a></li>
+<li><a href="#wordcount">WordCount 计算实验</a></li>
+<li><a href="#shuffle_1">第七幕：Shuffle 战争——为什么数据交换如此昂贵？</a></li>
+<li><a href="#_6">第八幕：数据倾斜——为什么九十九名士兵已经休息，最后一人还在拼命？</a></li>
+<li><a href="#_7">数据倾斜模拟</a></li>
+<li><a href="#_9">第九幕：容错战争——执行一半，服务器突然死亡</a></li>
+<li><a href="#yarn">第十幕：YARN 指挥部——谁来分配一千台机器？</a></li>
+<li><a href="#inputsplit">第十一幕：真正的分布式工程——数据本地性与 InputSplit</a></li>
+<li><a href="#java-mapreduce">第十二幕：Java 工程师的试炼——亲手写一个 MapReduce</a></li>
+<li><a href="#mapreduce_2">第十三幕：为什么 MapReduce 最终遇到了瓶颈？</a></li>
+<li><a href="#_15">第十四幕：首席架构师考核——八道面试题</a></li>
+<li><a href="#_16">尾声：一道来自东方的火光</a></li>
+<li><a href="#spark-dag">下一章：《Spark 崛起——内存计算与 DAG 战争》</a></li>
+</ul>
+</div>
+</details><article><blockquote>
+<p>阅读提示：数据倾斜实验把非热点记录平均分给全部十个 Reducer，因此热点节点负载为热点占比加上剩余占比的十分之一。</p>
+</blockquote>
+<p>上一章，Spring 王国遭遇了亿级数据危机。MySQL 巨城开始不堪重负，B+ 树骑士团、分库分表、读写分离和 ClickHouse 分析城相继登场。</p>
+<p>然而，首席架构师很快发现，真正的海量数据远不止一亿条订单。</p>
+<p>当数据从 GB 膨胀至 TB，再从 TB 膨胀至 PB，帝国将面对一个更加根本的问题：如果一台计算机根本无法高效完成任务，我们能否让一千台计算机共同完成？</p>
+<p>本章将沿着一个真实的工程问题，从最基础的分布式思想出发，逐渐深入 HDFS、NameNode、DataNode、YARN、MapReduce、Shuffle、数据倾斜与容错机制。</p>
+<h2 id="tb">第一幕：一百 TB 的秘密档案</h2>
+<p>数据大陆，公元 2027 年。</p>
+<p>距离 MySQL 巨城的危机已经过去半年。</p>
+<p>Spring 王国再次迎来了繁荣。</p>
+<p>交易系统运行稳定。</p>
+<p>Redis 要塞抵挡了大量热点请求。</p>
+<p>RabbitMQ 军团保证异步任务不断向前推进。</p>
+<p>MySQL 负责交易事务。</p>
+<p>ClickHouse 分析城负责大规模统计。</p>
+<p>一切似乎已经步入正轨。</p>
+<p>直到某个清晨。</p>
+<p>帝国情报总管带来一道新的命令。</p>
+<p>“陛下，我们想分析全国用户过去五年的行为日志。”</p>
+<p>国王 Java 放下手中的咖啡。</p>
+<p>“有多少数据？”</p>
+<p>“一百 TB。”</p>
+<p>“多少？”</p>
+<p>“一百 TB。”</p>
+<p>整个大殿陷入死寂。</p>
+<p>国王转头看向首席架构师。</p>
+<p>“我们的 MySQL 不是已经能够处理亿级数据了吗？”</p>
+<p>架构师摇了摇头。</p>
+<p>“陛下，这次不是简单的订单点查。”</p>
+<p>“我们需要扫描五年的日志，统计不同地区的用户行为，分析访问路径，提取关键特征。”</p>
+<p>“而且，这只是第一次计算。”</p>
+<p>“未来每天还会产生数 TB 的新数据。”</p>
+<p>国王皱起眉头。</p>
+<p>“那就买一台更强大的服务器。”</p>
+<p>“给它一 TB 内存，一百 TB 硬盘，一百二十八个 CPU 核心！”</p>
+<p>架构师没有立刻回答。</p>
+<p>而是在黑板上写下一句话。</p>
+<p>单机性能可以不断提高，但扩展成本、硬件上限与故障风险不会因此消失。</p>
+<p><img alt="故事场景插图" src="https://images.openai.com/static-rsc-4/aqaxpwjD_Dl5K-js3dxzRPSbx9bmgfjDm7-2gcWZAqcXoWmzdIwh2OOxoGWqIkDVs4VJ3cly4lYl3SrWHG8HP22mrVSUBj8EY1ekeb3h6o2mxJF-hL0bA9nWWiaFhz6us0nSCG9Mi17-QDDPWdFdRKewMyGsoP7TbIxGp9DmnRs?purpose=inline" /></p>
+<p><em>图片来源：The 9 Million Scrolls We Lost Forever</em></p>
+<p><a href="https://curated-cosmos.com/post/history/the-9-million-scrolls-we-lost-forever-512343.html?utm_source=chatgpt.com">curated-cosmos.com</a></p>
+<h3 id="100-tb">一、100 TB 到底有多大？</h3>
+<p>“陛下，我们先做一个简单的计算。”</p>
+<p>“假设有 100 TB 数据，需要全部扫描一遍。”</p>
+<p>“我们暂时忽略文件系统、解析和计算开销，只计算读取时间。”</p>
+<p>假设顺序读取速度为 500 MB/s，以十进制单位估算：</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>T</mi><mo>=</mo><mfrac><mrow><mn>100</mn><mo>×</mo><msup><mn>10</mn><mn>6</mn></msup><mtext> MB</mtext></mrow><mrow><mn>500</mn><mtext> MB/s</mtext></mrow></mfrac></mrow><annotation encoding="application/x-tex"> T=\frac{100\times10^6\text{ MB}}{500\text{ MB/s}} </annotation></semantics></math></span></p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>T</mi><mo>=</mo><mn>200000</mn><mtext> s</mtext><mo>≈</mo><mn>55.6</mn><mtext> 小时</mtext></mrow><annotation encoding="application/x-tex"> T=200000\text{ s}\approx55.6\text{ 小时} </annotation></semantics></math></span></p>
+<p>国王震惊。</p>
+<p>“只是读一遍，就可能需要两天多？”</p>
+<p>“在这个假设下，是的。”</p>
+<p>“而真实任务还需要解压、解析、过滤、聚合、排序，甚至多次扫描。”</p>
+<p>“当然，具体时间与存储类型、并行度、缓存、压缩率和访问方式有关。这不是所有单机的实际速度。”</p>
+<p>“但它足以说明一个问题。”</p>
+<p>“我们需要并行读取。”</p>
+<h3 id="_1">二、纵向扩容与横向扩容</h3>
+<p>架构师展示了两种方案。</p>
+<h3 id="scale-up">纵向扩容 Scale Up</h3>
+<p><img alt="故事场景插图" src="https://images.openai.com/static-rsc-4/tOmohgVSYaaft_0Ir0JKWT6yEMpNGBPAA2KIQffEnv5t7DeuDPQ2PpiJHk-seAoy7SheXZR0u65a-4RiU1DrBlb8YAd7B-0JmZ9v_khrN0Rqe_GU_pFeyaE5xqToo7JO4DiWt0PXWrmcFTxi2cHU1Mg5rjE_ZqL6Fc-QIV1gfaA?purpose=inline" /></p>
+<p><em>图片来源：The Agentic SRE: Why Autonomous Stacks Will Break Your Cloud (And How To Fix It) | by Damian Figiel | Mar, 2026 | Medium</em></p>
+<p>给一台机器增加 CPU、内存、磁盘和 I/O 能力。</p>
+<p>简单直接，但存在单机资源与成本上限。</p>
+<h3 id="scale-out">横向扩容 Scale Out</h3>
+<p><img alt="故事场景插图" src="https://images.openai.com/static-rsc-4/4sI2w2x2Y8RUSZa-ZjFmNd84cW6XDikki3TS-NP4hQIvekGBgrdYrvxOewF8aPMtr0-P7bQlSVcD29gMN_Lr7T46BlIi-sQt4_kzwMU4_d5j2aOFllUq-uRYKhwC9m8CpPY_Bto2Ui0PbY6gcdTkLVbWzr2eDjYN2CVdYmdM40w?purpose=inline" /></p>
+<p><em>图片来源：Intra data center | Solutions | EXFO</em></p>
+<p>增加多台机器，让它们共同存储和计算。</p>
+<p>具备水平扩展空间，但需要协调、通信与故障处理。</p>
+<p>国王恍然大悟。</p>
+<p>“原来如此。”</p>
+<p>“一台机器读不动，我们就让一百台机器一起读。”</p>
+<p>“正是。”</p>
+<p>“这就是分布式大数据处理的基本思路之一。”</p>
+<p>“不过，陛下，新的问题也随之而来。”</p>
+<p>“什么问题？”</p>
+<p>“谁负责把数据分给这一百台机器？”</p>
+<p>“如果其中一台突然坏了怎么办？”</p>
+<p>“如果有些机器干得快，有些机器干得慢怎么办？”</p>
+<p>“如果我们需要把一百台机器的结果合并，又该如何协调？”</p>
+<p>架构师望向北方。</p>
+<p>“解决这些问题的技术，正是我们即将拜访的 Hadoop 帝国。”</p>
+<h2 id="hadoop">第二幕：Hadoop 帝国——三大军团</h2>
+<p>在数据大陆北方，有一个庞大的联邦。</p>
+<p>它的名字叫作：</p>
+<p>Hadoop。</p>
+<p>这不是一座单独的城市。</p>
+<p>而是一套由多种组件构成的大数据基础设施。</p>
+<p>帝国最重要的三大军团分别是：</p>
+<h2 id="hadoop_1">Hadoop 核心架构</h2>
+<p>HDFS：分布式文件系统</p>
+<p>负责把大文件分块并保存到多台机器</p>
+<p>YARN：集群资源管理</p>
+<p>负责资源分配、应用调度与运行管理</p>
+<p>MapReduce：分布式计算模型与执行框架</p>
+<p>负责把计算任务拆分、处理并聚合</p>
+<p>国王问：</p>
+<p>“他们有什么关系？”</p>
+<p>架构师回答：</p>
+<p>“HDFS 像仓库军团。”</p>
+<p>“YARN 像调兵遣将的军事指挥机构。”</p>
+<p>“MapReduce 像具体的作战战术。”</p>
+<p>“我们先拜访仓库军团。”</p>
+<h2 id="hdfs">第三幕：HDFS——将巨大的卷宗切成碎片</h2>
+<p>Hadoop 帝国边境。</p>
+<p>国王来到一座巨大的仓库。</p>
+<p>一名管理员正试图把一份庞大的文件搬进去。</p>
+<p>文件名：</p>
+<p><code>access_log_2027.txt</code></p>
+<p>文件大小：</p>
+<p>1 TB。</p>
+<p>普通仓库无法轻松容纳和处理。</p>
+<p>于是 HDFS 的指挥官走了出来。</p>
+<p>“把它拆开。”</p>
+<p>国王一愣。</p>
+<p>“拆开？”</p>
+<p>“没错。”</p>
+<p>“一个大文件，在 HDFS 中会被划分成多个 Block。”</p>
+<h3 id="block">一、Block：数据块</h3>
+<p>假设我们使用 128 MiB 的 Block 大小。</p>
+<p>那么对于一个约 1 TiB 的文件，理论上需要：</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mfrac><mrow><mn>1024</mn><mo>×</mo><mn>1024</mn></mrow><mn>128</mn></mfrac><mo>=</mo><mn>8192</mn></mrow><annotation encoding="application/x-tex"> \frac{1024\times1024}{128}=8192 </annotation></semantics></math></span></p>
+<p>即大约 8192 个数据块。</p>
+<p>注意：这里使用的是二进制存储单位 TiB 和 MiB。HDFS 的 Block 大小可配置，并非所有集群都固定为 128 MiB。</p>
+<p>国王惊讶。</p>
+<p>“8192 个数据块？”</p>
+<p>“然后呢？”</p>
+<p>“然后，我们把这些数据块分散存储到不同的 DataNode 上。”</p>
+<h3 id="hdfs_1">HDFS 文件分块示意</h3>
+<p>一个大文件</p>
+<p>示例：512 MiB</p>
+<p>Block 0</p>
+<p>128 MiB</p>
+<p>Block 1</p>
+<p>128 MiB</p>
+<p>Block 2</p>
+<p>128 MiB</p>
+<p>Block 3</p>
+<p>128 MiB</p>
+<p>DataNode 1</p>
+<p>保存数据块副本</p>
+<p>DataNode 2</p>
+<p>保存数据块副本</p>
+<p>DataNode 3</p>
+<p>保存数据块副本</p>
+<p>逻辑示意：实际数据块放置由 HDFS 决定，并可能存在多个副本。</p>
+<h3 id="block_1">二、为什么 Block 要设计得比较大？</h3>
+<p>国王好奇地问：</p>
+<p>“为什么不把一 TB 文件切成几亿个极小的数据块？”</p>
+<p>指挥官笑了。</p>
+<p>“陛下，数据块不是越小越好。”</p>
+<p>“假设每个 Block 只有 4 KB。”</p>
+<p>“一个 TB 级文件会被拆分成数量极其庞大的小块。”</p>
+<p>“每个 Block 都需要相应的元数据管理。”</p>
+<p>“数量过多还会造成任务调度开销。”</p>
+<p>“而较大的 Block 通常更适合大文件的顺序读取和吞吐型工作负载。”</p>
+<p>“当然，Block 太大也可能影响并行任务的切分粒度。”</p>
+<p>“这是工程权衡。”</p>
+<h2 id="namenode">第四幕：NameNode——掌管全帝国地图的总指挥</h2>
+<p>国王望着散落在各处的数据块。</p>
+<p>“如果我要读取文件，怎么知道第 100 个 Block 在哪台机器？”</p>
+<p>仓库指挥官说道：</p>
+<p>“您需要询问 NameNode。”</p>
+<h3 id="namenode_1">一、NameNode 负责什么？</h3>
+<p>“NameNode 是 HDFS 的元数据管理核心。”</p>
+<p>“它负责维护文件目录结构、权限、文件与 Block 的映射，以及 Block 位置信息等。”</p>
+<p>国王问：</p>
+<p>“那它是不是负责存储所有文件内容？”</p>
+<p>“不是。”</p>
+<p>“真正的数据块存储在 DataNode 上。”</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>文件：/logs/2027/access.log
+
+Block 001
+  DataNode A
+  DataNode B
+  DataNode C
+
+Block 002
+  DataNode B
+  DataNode D
+  DataNode E
+</code></pre></div>
+
+<p>“NameNode 知道这些 Block 的位置。”</p>
+<p>“客户端先与 NameNode 交互获取所需元数据，再直接与相关 DataNode 传输文件数据。”</p>
+<h3 id="hdfs_2">HDFS 客户端读取数据</h3>
+<p>Client</p>
+<p>请求并获取 Block 位置</p>
+<p>NameNode</p>
+<p>管理元数据</p>
+<p>客户端根据位置信息直接读取 DataNode</p>
+<p>DataNode A</p>
+<p>DataNode B</p>
+<p>DataNode C</p>
+<p>读取过程中，文件数据通常不会通过 NameNode 中转。</p>
+<h3 id="fsimage-editlog">二、FsImage 与 EditLog</h3>
+<p>NameNode 还需要记住文件系统的状态。</p>
+<p>架构师解释：</p>
+<p>“这就涉及两个重要概念。”</p>
+<p>FsImage：文件系统命名空间元数据的持久化检查点映像。</p>
+<p>EditLog：记录命名空间变更操作的编辑日志。</p>
+<p>“NameNode 可以通过这些持久化信息恢复命名空间状态。”</p>
+<p>“但陛下，不要把 SecondaryNameNode 理解成 NameNode 的实时备用节点。”</p>
+<p>“传统 SecondaryNameNode 主要承担检查点相关工作，并不能直接等同于高可用架构中的 Standby NameNode。”</p>
+<p>国王点了点头。</p>
+<p>“那么，如果 NameNode 本身坏了怎么办？”</p>
+<p>“这就是 HDFS 高可用架构需要解决的事情。”</p>
+<p>“在 HA 部署下，我们通常会有 Active NameNode 和 Standby NameNode，配合共享编辑日志与故障切换机制。”</p>
+<p>“但它并非仅仅多启动一个 NameNode 就能自动实现高可用。”</p>
+<h2 id="_2">第五幕：副本军团——一台服务器坏了怎么办？</h2>
+<p>当天夜里。</p>
+<p>HDFS 帝国的一座数据仓库突然发生故障。</p>
+<p>DataNode B 失去联系。</p>
+<p>国王脸色骤变。</p>
+<p>“我们保存在上面的文件是不是丢失了？”</p>
+<p>指挥官回答：</p>
+<p>“不一定。”</p>
+<p>“因为我们采用了数据块副本机制。”</p>
+<h3 id="_3">一、三副本策略</h3>
+<p>假设某个 Block 配置三个副本。</p>
+<p>那么它可以分别保存在三个 DataNode 上。</p>
+<p>当其中一台服务器故障时，其他节点上的副本仍可能提供数据。</p>
+<p>“NameNode 会通过心跳等机制感知 DataNode 的状态。”</p>
+<p>“还可以根据块报告等信息维护 Block 的副本情况。”</p>
+<p>“如果某个 Block 副本数量低于要求，系统能够在符合条件时安排补副本。”</p>
+<p>国王问：</p>
+<p>“三副本是不是意味着，无论损坏几台机器都不会丢数据？”</p>
+<p>“当然不是。”</p>
+<p>“如果一个 Block 的全部副本都不可用，就仍然可能发生数据不可用或丢失。”</p>
+<p>“此外，副本如何跨机器、机架分布，以及集群故障范围，都非常重要。”</p>
+<h3 id="_4">二、副本的代价</h3>
+<p>“陛下，假设我们要存储 100 TB 逻辑数据，全部使用三副本。”</p>
+<p>“在忽略元数据与其他额外开销的情况下，副本数据大约需要 300 TB 的原始存储容量。”</p>
+<p>国王皱起眉头。</p>
+<p>“存储成本增加三倍？”</p>
+<p>“副本机制确实会带来较高的存储开销。”</p>
+<p>“不过现代 HDFS 也支持纠删码等存储策略，可以在特定场景下降低冗余容量成本，同时带来编码、恢复和访问方面的权衡。”</p>
+<h2 id="mapreduce">第六幕：MapReduce——一千名士兵，如何完成同一项任务？</h2>
+<p>HDFS 的问题终于基本解决。</p>
+<p>数据可以分块保存。</p>
+<p>节点损坏时可以利用副本恢复。</p>
+<p>但国王发现：</p>
+<p>“我们现在只是有了足够大的仓库。”</p>
+<p>“还没有解决计算问题。”</p>
+<p>架构师点头。</p>
+<p>“所以，接下来是 MapReduce。”</p>
+<p>“陛下，请先忘记编程。”</p>
+<p>“我们从一个简单故事开始。”</p>
+<h3 id="_5">一、统计一亿篇文章中每个单词出现的次数</h3>
+<p>国王下令：</p>
+<p>“统计全国所有文章中，每个单词出现了多少次。”</p>
+<p>“例如 Java、Redis、MySQL。”</p>
+<p>如果只有一个人计算，他需要：</p>
+<p>打开所有文章。</p>
+<p>阅读所有内容。</p>
+<p>逐个统计单词。</p>
+<p>最后汇总。</p>
+<p>但如果有一千名士兵呢？</p>
+<p>架构师说道：</p>
+<p>“我们可以把文章分给不同士兵。”</p>
+<p>“每个人只处理自己负责的内容。”</p>
+<p>“然后把同类结果汇总。”</p>
+<p>“这就是 MapReduce 思想的核心。”</p>
+<h3 id="map">二、Map：映射阶段</h3>
+<p>假设我们有三份文本。</p>
+<div class="codehilite"><pre><span></span><code>文件 A：Java Redis Java
+文件 B：Redis MySQL
+文件 C：Java MySQL Redis
+</code></pre></div>
+
+<p>Map 阶段会把单词转换成键值对。</p>
+<div class="codehilite"><pre><span></span><code>(Java, 1)
+(Redis, 1)
+(Java, 1)
+
+(Redis, 1)
+(MySQL, 1)
+
+(Java, 1)
+(MySQL, 1)
+(Redis, 1)
+</code></pre></div>
+
+<p>国王问：</p>
+<p>“为什么要变成 <code>(单词, 1)</code>？”</p>
+<p>“因为后续需要根据单词这个 Key 汇总数量。”</p>
+<p>“这里 Value 为 1，表示发现一次。”</p>
+<h3 id="shuffle">三、Shuffle：重新分组</h3>
+<p>Map 的结果分散在不同机器。</p>
+<p>但是同一个单词可能出现在不同机器上。</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>机器 A：
+(Java, 1)
+(Redis, 1)
+
+机器 B：
+(Java, 1)
+(MySQL, 1)
+
+机器 C：
+(Java, 1)
+(Redis, 1)
+</code></pre></div>
+
+<p>“接下来，我们需要把相同 Key 的记录送到负责它们的 Reduce 任务。”</p>
+<p>这个过程涉及分区、网络传输、排序与分组等操作，统称 Shuffle 阶段的相关工作。</p>
+<h3 id="reduce">四、Reduce：归约阶段</h3>
+<p>把同一个 Key 对应的 Value 汇总。</p>
+<div class="codehilite"><pre><span></span><code>Java  → [1, 1, 1] → 3
+Redis → [1, 1]    → 2
+MySQL → [1]       → 1
+</code></pre></div>
+
+<p>最终结果：</p>
+<div class="codehilite"><pre><span></span><code>Java: 3
+Redis: 2
+MySQL: 1
+</code></pre></div>
+
+<p>国王眼前一亮。</p>
+<p>“原来 MapReduce 并不神秘！”</p>
+<p>“就是先拆分任务，再把同类数据聚集起来计算！”</p>
+<p>“可以这样理解。”</p>
+<p>“不过实际的 MapReduce 框架还需要负责输入切分、任务调度、数据本地性、Shuffle 文件管理、失败重试等大量工程细节。”</p>
+<h3 id="mapreduce_1">交互实验：亲手执行一次 MapReduce</h3>
+<h2 id="wordcount">WordCount 计算实验</h2>
+<div class="lab" data-lab="wordcount"></div>
+
+<h2 id="shuffle_1">第七幕：Shuffle 战争——为什么数据交换如此昂贵？</h2>
+<p>MapReduce 军团取得了第一次胜利。</p>
+<p>但就在国王准备庆祝时，一名工程师跑进大殿。</p>
+<p>“陛下！新的问题出现了！”</p>
+<p>“十台计算机都已经完成 Map，可整个任务仍然很慢！”</p>
+<p>国王不解。</p>
+<p>“计算不是完成了吗？”</p>
+<p>架构师回答：</p>
+<p>“Map 完成，并不意味着整个计算完成。”</p>
+<p>“因为我们还必须把相同 Key 的数据汇集到对应的 Reduce 任务。”</p>
+<p>“这场数据大迁徙，就是 Shuffle。”</p>
+<h3 id="shuffle_2">一、Shuffle 为什么需要网络传输？</h3>
+<p>假设一百台 Mapper 分别分析一部分用户订单。</p>
+<p>每台机器都会产生这样的中间结果：</p>
+<div class="codehilite"><pre><span></span><code>(北京, 100)
+(上海, 200)
+(广州, 150)
+</code></pre></div>
+
+<p>如果我们按照城市汇总销售额，就要保证同一个城市的数据到达同一个 Reducer。</p>
+<p>于是，系统必须根据 Key 进行分区。</p>
+<p>默认 HashPartitioner 的典型计算方式可以理解为：</p>
+<div class="codehilite"><pre><span></span><code>partition = (key.hashCode() &amp; Integer.MAX_VALUE)
+            % numReduceTasks;
+</code></pre></div>
+
+<p>如果有四个 Reducer，那么不同城市的 Key 会被分配到对应的分区。</p>
+<p>但是，同一个城市的数据可能来自几十台 Mapper。</p>
+<p>这意味着什么？</p>
+<p>大量数据需要跨机器传输。</p>
+<p>国王问：</p>
+<p>“网络不是很快吗？”</p>
+<p>架构师回答：</p>
+<p>“网络很快，但如果 Shuffle 需要传输数十 TB 数据，网络就可能成为主要瓶颈。”</p>
+<p>“并且这并不只有网络开销。”</p>
+<p>他展开 Shuffle 的详细作战地图。</p>
+<h3 id="mapreduce-shuffle">MapReduce Shuffle 过程</h3>
+<p>Mapper 输出中间 Key-Value</p>
+<p>Partition + Sort</p>
+<p>根据 Key 分区，在 Map 侧组织有序数据</p>
+<p>Spill / Merge</p>
+<p>必要时溢写磁盘，并归并中间数据</p>
+<p>Network Shuffle</p>
+<p>Reducer 获取属于自己的 Map 输出分区</p>
+<p>Merge + Group</p>
+<p>合并、排序、按 Key 分组</p>
+<p>Reduce 聚合</p>
+<p>架构师说道：</p>
+<p>“在 Hadoop MapReduce 中，Map 中间输出通常需要在本地组织并可能溢写磁盘，而 Reduce 端需要获取对应分区并进行合并与分组。”</p>
+<p>“所以 Shuffle 可能同时消耗磁盘 I/O、网络带宽、CPU 和内存。”&#x20;</p>
+<p><a href="https://www.google.com/s2/favicons?domain=https://hadoop.apache.org\&amp;sz=32">image</a></p>
+<p>MapReduce Tutorial</p>
+<p>+1</p>
+<h3 id="combiner">二、Combiner：先在本地汇总</h3>
+<p>国王忽然想到了一个办法。</p>
+<p>“假设机器 A 产生了一百万个 <code>(Java, 1)</code>。”</p>
+<p>“为什么不先在机器 A 上统计为 <code>(Java, 1000000)</code>，然后再传输？”</p>
+<p>架构师露出了笑容。</p>
+<p>“陛下，您已经理解 Combiner 了。”</p>
+<p>Combiner 可以在 Map 端对符合条件的中间数据进行局部聚合。</p>
+<p>例如：</p>
+<p>原本：</p>
+<div class="codehilite"><pre><span></span><code>(Java, 1)
+(Java, 1)
+(Java, 1)
+(Java, 1)
+</code></pre></div>
+
+<p>经过本地汇总：</p>
+<div class="codehilite"><pre><span></span><code>(Java, 4)
+</code></pre></div>
+
+<p>需要传输的数据量可能大幅下降。</p>
+<p>但是必须注意：</p>
+<p>Combiner 不保证一定执行，也不保证只执行一次。</p>
+<p>因此，不能把需要精确执行一次的业务逻辑放进 Combiner。</p>
+<p>而且，局部汇总必须在数学和业务语义上是安全的。</p>
+<p>求和、计数通常适合这种设计。</p>
+<p>直接把平均值做成简单的局部平均再平均，则可能得到错误结果。</p>
+<p>例如：</p>
+<p>A 组有 2 个学生，平均分 90。</p>
+<p>B 组有 8 个学生，平均分 60。</p>
+<p>直接求两组平均：</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mo stretchy="false">(</mo><mn>90</mn><mo>+</mo><mn>60</mn><mo stretchy="false">)</mo><mi mathvariant="normal">/</mi><mn>2</mn><mo>=</mo><mn>75</mn></mrow><annotation encoding="application/x-tex"> (90+60)/2=75 </annotation></semantics></math></span></p>
+<p>但真实总体平均：</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mfrac><mrow><mn>2</mn><mo>×</mo><mn>90</mn><mo>+</mo><mn>8</mn><mo>×</mo><mn>60</mn></mrow><mn>10</mn></mfrac><mo>=</mo><mn>66</mn></mrow><annotation encoding="application/x-tex"> \frac{2\times90+8\times60}{10}=66 </annotation></semantics></math></span></p>
+<p>“所以如果要分布式计算平均值，可以先聚合 <code>(sum,count)</code>，最终再用 <code>sum/count</code>。”</p>
+<p>国王恍然大悟。</p>
+<p>“看来分布式计算，不只是把任务拆开。”</p>
+<p>“还要确保拆开以后，计算结果依然正确。”</p>
+<h2 id="_6">第八幕：数据倾斜——为什么九十九名士兵已经休息，最后一人还在拼命？</h2>
+<p>帝国再次举办了一场大型计算任务。</p>
+<p>这次有一百名 Reducer。</p>
+<p>任务开始时，所有人都很忙碌。</p>
+<p>一个小时后。</p>
+<p>九十九名 Reducer 全部完成工作。</p>
+<p>只有最后一名还在不停处理。</p>
+<p>国王愤怒地问：</p>
+<p>“为什么我们拥有一百台机器，却依然要等最后一个人？”</p>
+<p>架构师回答：</p>
+<p>“因为数据没有均匀分配。”</p>
+<p>“这就是数据倾斜（Data Skew）。”</p>
+<h3 id="key">一、热点 Key 导致倾斜</h3>
+<p>假设我们统计电商平台用户的行为。</p>
+<p>其中一个超级热门商品占据了全部事件的 80%。</p>
+<p>其他商品总共只占 20%。</p>
+<p>如果按照 <code>productId</code> 分区，那么这个热门商品对应的所有记录可能被分配到同一个 Reducer。</p>
+<p>结果：</p>
+<p>其他 Reducer 很快完成。</p>
+<p>热点 Reducer 却承担了绝大部分计算。</p>
+<h2 id="_7">数据倾斜模拟</h2>
+<div class="lab" data-lab="skew"></div>
+
+<h3 id="_8">二、如何解决数据倾斜？</h3>
+<p>架构师向国王提出四种策略。</p>
+<p>第一种：局部预聚合。</p>
+<p>对于可结合的聚合操作，先在 Mapper 本地合并热点 Key 的大量记录，降低网络和 Reduce 输入的数据量。</p>
+<p>第二种：热点 Key 加盐。</p>
+<p>例如原本：</p>
+<div class="codehilite"><pre><span></span><code>(product_1001, value)
+</code></pre></div>
+
+<p>可以在允许的聚合场景中拆成：</p>
+<div class="codehilite"><pre><span></span><code>(product_1001_0, value)
+(product_1001_1, value)
+(product_1001_2, value)
+</code></pre></div>
+
+<p>第一阶段分别聚合。</p>
+<p>第二阶段再合并回原始 <code>product_1001</code>。</p>
+<p>“这样可以把热点 Key 的计算压力分散出去。”</p>
+<p>“但要注意，添加随机后缀并不总是正确，尤其涉及 Join、去重或对顺序敏感的操作时，需要专门设计。”</p>
+<p>第三种：自定义分区策略。</p>
+<p>通过分析 Key 分布，让任务分配更加合理。</p>
+<p>但国王必须记住：</p>
+<p>“仅仅增加 Reducer 数量，并不能自动拆散同一个热点 Key。”</p>
+<p>第四种：针对大表 Join 的专门优化。</p>
+<p>例如在后续 Spark 篇中，我们还会介绍广播 Join、倾斜 Join 优化和自适应查询执行。</p>
+<h2 id="_9">第九幕：容错战争——执行一半，服务器突然死亡</h2>
+<p>就在集群准备完成一次耗时三小时的大型计算时。</p>
+<p>轰！</p>
+<p>一台服务器突然断电。</p>
+<p>国王望着损坏的计算节点，脸色苍白。</p>
+<p>“任务已经运行两个小时了！”</p>
+<p>“难道所有工作都要重新来过？”</p>
+<p>MapReduce 指挥官走了出来。</p>
+<p>“陛下，这正是分布式计算框架必须解决的问题。”</p>
+<h3 id="_10">一、任务失败重试</h3>
+<p>“MapReduce 会将作业拆分成多个任务。”</p>
+<p>“如果一个 Task 失败，框架可以在符合策略的情况下重新执行该任务。”</p>
+<p>“这样通常不需要从头重新执行整个作业。”</p>
+<p>不过，如果 Map 所在节点故障，且其本地中间输出丢失，对应 Map 任务可能需要重新执行，以便 Reducer 重新获取相关结果。</p>
+<p>国王问：</p>
+<p>“那如果整个计算过程中，有十几台机器发生故障呢？”</p>
+<p>“需要根据任务失败次数、节点健康状态、集群剩余资源等条件决定能否继续执行。”</p>
+<p>“容错不代表无限次失败都能成功。”</p>
+<h3 id="_11">二、推测执行：处理拖后腿的慢任务</h3>
+<p>架构师继续解释：</p>
+<p>“有时候一台机器没有彻底坏掉。”</p>
+<p>“它只是特别慢。”</p>
+<p>“可能是磁盘性能下降，也可能是资源竞争。”</p>
+<p>“如果整个作业都在等待最后一个慢任务，框架可以在一定条件下启动同一任务的另一次尝试。”</p>
+<p>“谁先成功完成，就采用符合框架提交规则的结果。”</p>
+<p>“这叫推测执行（Speculative Execution）。”&#x20;</p>
+<p><a href="https://www.google.com/s2/favicons?domain=https://hadoop.apache.org\&amp;sz=32">image</a></p>
+<p>MapReduce Tutorial</p>
+<p>国王问：</p>
+<p>“那岂不是执行了两次？”</p>
+<p>“是的，所以业务代码必须注意重复执行问题。”</p>
+<p>“如果一个 Map 任务只是读取数据并产生中间结果，通常比较适合重试。”</p>
+<p>“但如果它直接调用外部支付接口、发送不可撤销的通知，重复执行就可能造成严重副作用。”</p>
+<p>这与 Java 后端消息队列的重复消费问题，本质上有相似之处：分布式系统中的任务可能重试，所以外部副作用需要幂等与可靠提交设计。</p>
+<h2 id="yarn">第十幕：YARN 指挥部——谁来分配一千台机器？</h2>
+<p>MapReduce 成功运行后，国王又发现一个问题。</p>
+<p>“Hadoop 帝国有一千台服务器。”</p>
+<p>“现在同时来了三个任务。”</p>
+<p>“第一个任务需要分析日志。”</p>
+<p>“第二个任务需要训练数据预处理。”</p>
+<p>“第三个任务需要统计订单。”</p>
+<p>“究竟由谁负责分配 CPU 和内存？”</p>
+<p>架构师回答：</p>
+<p>“YARN。”</p>
+<p>YARN 的基本架构中，有三个重要角色。</p>
+<h3 id="resourcemanager">ResourceManager：总资源管理者</h3>
+<p>负责集群范围内的资源管理和调度决策。</p>
+<h3 id="nodemanager">NodeManager：机器管理员</h3>
+<p>每台计算节点上运行 NodeManager，负责节点资源与 Container 的运行和监控。</p>
+<h3 id="applicationmaster">ApplicationMaster：应用指挥官</h3>
+<p>负责某个应用的任务协调，并向 ResourceManager 申请资源，配合 NodeManager 启动任务。</p>
+<h3 id="yarn_1">YARN 资源管理架构</h3>
+<p>ResourceManager</p>
+<p>全局资源分配与应用管理</p>
+<p>ApplicationMaster</p>
+<p>协调当前应用并申请 Container</p>
+<p>NodeManager 1</p>
+<p>Container</p>
+<p>Task</p>
+<p>NodeManager 2</p>
+<p>Container</p>
+<p>Task</p>
+<p>NodeManager 3</p>
+<p>Container</p>
+<p>Task</p>
+<p>简化的逻辑结构。实际 ResourceManager 也会与各 NodeManager 交互，ApplicationMaster 本身同样运行于获得的资源容器中。</p>
+<p>架构师补充：</p>
+<p>“YARN 将全局资源管理与每个应用的任务管理分开，使不同计算框架可以共享集群资源。”</p>
+<p>“因此，YARN 并不是只能运行 MapReduce。”&#x20;</p>
+<p><a href="https://www.google.com/s2/favicons?domain=https://hadoop.apache.org\&amp;sz=32">image</a></p>
+<p>Apache Hadoop YARN</p>
+<p>+1</p>
+<p>国王问：</p>
+<p>“这是不是和 Kubernetes 很像？”</p>
+<p>“在资源调度、容器化工作负载管理等方面存在一定相似性。”</p>
+<p>“但两者的设计背景、调度模型和生态系统不同，不能简单视为完全相同的产品。”</p>
+<h2 id="inputsplit">第十一幕：真正的分布式工程——数据本地性与 InputSplit</h2>
+<p>国王原以为一切已经结束。</p>
+<p>突然，HDFS 指挥官提出了一个问题。</p>
+<p>“陛下，假设一块 128 MiB 的数据在机器 A 上。”</p>
+<p>“但我们的 Map 任务却被调度到了机器 B。”</p>
+<p>“会发生什么？”</p>
+<p>国王回答：</p>
+<p>“机器 B 要从机器 A 读取数据。”</p>
+<p>“没错。”</p>
+<p>“如果上千个任务都需要跨网络读取大量数据，就可能产生可观的网络压力。”</p>
+<p>“所以，Hadoop 引入了一个非常重要的设计思想。”</p>
+<p>移动计算，尽量靠近数据，而不是总把大量数据搬向计算。</p>
+<h3 id="_12">一、数据本地性</h3>
+<p>架构师解释：</p>
+<p>“如果某个计算任务需要处理 HDFS 上的数据，调度器会尽可能利用数据位置信息，将计算安排在靠近数据的位置。”</p>
+<p>常见情况包括：</p>
+<ul>
+<li>节点本地：任务运行在持有所需数据的节点。</li>
+<li>机架本地：任务运行在同一机架的其他节点。</li>
+<li>非本地：任务需要通过更远的网络路径读取数据。</li>
+</ul>
+<p>“当然，这不是绝对要求。”</p>
+<p>“如果数据所在节点已经非常繁忙，调度器也需要考虑资源利用率和等待时间。”</p>
+<h3 id="block-inputsplit">二、Block 与 InputSplit 的区别</h3>
+<p>国王突然问：</p>
+<p>“既然 HDFS 已经有 Block，为什么 MapReduce 还需要 InputSplit？”</p>
+<p>架构师笑了。</p>
+<p>“这是面试里非常容易混淆的概念。”</p>
+<p>Block 是存储层概念。</p>
+<p>它描述 HDFS 如何将文件划分为物理存储的数据块。</p>
+<p>InputSplit 是计算层概念。</p>
+<p>它描述一个 Map Task 需要处理的逻辑输入范围。</p>
+<p>两者并不必然一一对应。</p>
+<p>例如：</p>
+<p>HDFS 把文件保存成若干 Block。</p>
+<p>MapReduce 的 InputFormat 则决定如何生成 InputSplit。</p>
+<p>RecordReader 再把 Split 中的数据解析为 Mapper 能处理的 Key-Value 记录。</p>
+<p>“所以，一个 Mapper 通常对应一个 InputSplit，而不是严格地对应一个 HDFS Block。”</p>
+<p>“如果文件由多行文本组成，InputSplit 的边界还可能落在一行中间，RecordReader 必须正确处理记录边界。”</p>
+<p>国王终于理解。</p>
+<p>“原来数据存储的切分方式，与计算任务的切分方式，并不是同一个概念。”</p>
+<h2 id="java-mapreduce">第十二幕：Java 工程师的试炼——亲手写一个 MapReduce</h2>
+<p>第二天，首席架构师召集了 Spring 王国的 Java 工程师。</p>
+<p>“诸位，你们已经理解 MapReduce 的基本思想。”</p>
+<p>“现在，请用 Java 实现 WordCount。”</p>
+<p>大厅里瞬间安静下来。</p>
+<p>一名年轻工程师走上前。</p>
+<p>“我来。”</p>
+<p>他拿出纸笔，写下一段 Hadoop MapReduce 程序。</p>
+<h3 id="mapper">Mapper：把单词转换成键值对</h3>
+<div class="codehilite"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">WordCountMapper</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">Mapper</span><span class="o">&lt;</span>
+<span class="w">        </span><span class="n">LongWritable</span><span class="p">,</span>
+<span class="w">        </span><span class="n">Text</span><span class="p">,</span>
+<span class="w">        </span><span class="n">Text</span><span class="p">,</span>
+<span class="w">        </span><span class="n">IntWritable</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">IntWritable</span><span class="w"> </span><span class="n">ONE</span><span class="w"> </span><span class="o">=</span>
+<span class="w">            </span><span class="k">new</span><span class="w"> </span><span class="n">IntWritable</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">Text</span><span class="w"> </span><span class="n">word</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Text</span><span class="p">();</span>
+
+<span class="w">    </span><span class="nd">@Override</span>
+<span class="w">    </span><span class="kd">protected</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">map</span><span class="p">(</span>
+<span class="w">            </span><span class="n">LongWritable</span><span class="w"> </span><span class="n">key</span><span class="p">,</span>
+<span class="w">            </span><span class="n">Text</span><span class="w"> </span><span class="n">value</span><span class="p">,</span>
+<span class="w">            </span><span class="n">Context</span><span class="w"> </span><span class="n">context</span>
+<span class="w">    </span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">IOException</span><span class="p">,</span><span class="w"> </span><span class="n">InterruptedException</span><span class="w"> </span><span class="p">{</span>
+
+<span class="w">        </span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">words</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">value</span><span class="p">.</span><span class="na">toString</span><span class="p">()</span>
+<span class="w">                </span><span class="p">.</span><span class="na">split</span><span class="p">(</span><span class="s">&quot;\\s+&quot;</span><span class="p">);</span>
+
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">w</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">words</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">w</span><span class="p">.</span><span class="na">isEmpty</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">word</span><span class="p">.</span><span class="na">set</span><span class="p">(</span><span class="n">w</span><span class="p">);</span>
+<span class="w">                </span><span class="n">context</span><span class="p">.</span><span class="na">write</span><span class="p">(</span><span class="n">word</span><span class="p">,</span><span class="w"> </span><span class="n">ONE</span><span class="p">);</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>国王看到了一些陌生类型。</p>
+<p>“<code>LongWritable</code> 是什么？”</p>
+<p>“为什么不用 Java 原生的 <code>Long</code>？”</p>
+<p>工程师解释：</p>
+<p>“Hadoop 提供了一套 Writable 类型，用于框架中的数据序列化和传输。”</p>
+<p>例如：</p>
+<ul>
+<li><code>IntWritable</code> 对应整数值。</li>
+<li><code>LongWritable</code> 对应长整数值。</li>
+<li><code>Text</code> 表示文本数据。</li>
+</ul>
+<p>“Mapper 的输入 Key 通常由具体 InputFormat 和 RecordReader 决定。”</p>
+<p>“对于常见 TextInputFormat，Key 通常是行在文件中的字节偏移量，Value 是一行文本。”</p>
+<h3 id="reducer">Reducer：汇总相同单词的计数</h3>
+<div class="codehilite"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">WordCountReducer</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">Reducer</span><span class="o">&lt;</span>
+<span class="w">        </span><span class="n">Text</span><span class="p">,</span>
+<span class="w">        </span><span class="n">IntWritable</span><span class="p">,</span>
+<span class="w">        </span><span class="n">Text</span><span class="p">,</span>
+<span class="w">        </span><span class="n">IntWritable</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+
+<span class="w">    </span><span class="nd">@Override</span>
+<span class="w">    </span><span class="kd">protected</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">reduce</span><span class="p">(</span>
+<span class="w">            </span><span class="n">Text</span><span class="w"> </span><span class="n">key</span><span class="p">,</span>
+<span class="w">            </span><span class="n">Iterable</span><span class="o">&lt;</span><span class="n">IntWritable</span><span class="o">&gt;</span><span class="w"> </span><span class="n">values</span><span class="p">,</span>
+<span class="w">            </span><span class="n">Context</span><span class="w"> </span><span class="n">context</span>
+<span class="w">    </span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">IOException</span><span class="p">,</span><span class="w"> </span><span class="n">InterruptedException</span><span class="w"> </span><span class="p">{</span>
+
+<span class="w">        </span><span class="kt">int</span><span class="w"> </span><span class="n">sum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">IntWritable</span><span class="w"> </span><span class="n">value</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">values</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">sum</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">value</span><span class="p">.</span><span class="na">get</span><span class="p">();</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="n">context</span><span class="p">.</span><span class="na">write</span><span class="p">(</span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">IntWritable</span><span class="p">(</span><span class="n">sum</span><span class="p">));</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>架构师点头。</p>
+<p>“很不错。”</p>
+<p>“对于 WordCount，我们还可以把这个 Reducer 用作 Combiner，因为计数求和支持安全的局部聚合。”</p>
+<h3 id="job">Job：组织整个计算任务</h3>
+<div class="codehilite"><pre><span></span><code><span class="n">Configuration</span><span class="w"> </span><span class="n">conf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Configuration</span><span class="p">();</span>
+
+<span class="n">Job</span><span class="w"> </span><span class="n">job</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Job</span><span class="p">.</span><span class="na">getInstance</span><span class="p">(</span><span class="n">conf</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;word-count&quot;</span><span class="p">);</span>
+
+<span class="n">job</span><span class="p">.</span><span class="na">setJarByClass</span><span class="p">(</span><span class="n">WordCountApp</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+
+<span class="n">job</span><span class="p">.</span><span class="na">setMapperClass</span><span class="p">(</span><span class="n">WordCountMapper</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="n">job</span><span class="p">.</span><span class="na">setCombinerClass</span><span class="p">(</span><span class="n">WordCountReducer</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="n">job</span><span class="p">.</span><span class="na">setReducerClass</span><span class="p">(</span><span class="n">WordCountReducer</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+
+<span class="n">job</span><span class="p">.</span><span class="na">setOutputKeyClass</span><span class="p">(</span><span class="n">Text</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="n">job</span><span class="p">.</span><span class="na">setOutputValueClass</span><span class="p">(</span><span class="n">IntWritable</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+
+<span class="n">FileInputFormat</span><span class="p">.</span><span class="na">addInputPath</span><span class="p">(</span>
+<span class="w">    </span><span class="n">job</span><span class="p">,</span>
+<span class="w">    </span><span class="k">new</span><span class="w"> </span><span class="n">Path</span><span class="p">(</span><span class="s">&quot;/input/logs&quot;</span><span class="p">)</span>
+<span class="p">);</span>
+
+<span class="n">FileOutputFormat</span><span class="p">.</span><span class="na">setOutputPath</span><span class="p">(</span>
+<span class="w">    </span><span class="n">job</span><span class="p">,</span>
+<span class="w">    </span><span class="k">new</span><span class="w"> </span><span class="n">Path</span><span class="p">(</span><span class="s">&quot;/output/wordcount&quot;</span><span class="p">)</span>
+<span class="p">);</span>
+
+<span class="n">System</span><span class="p">.</span><span class="na">exit</span><span class="p">(</span><span class="n">job</span><span class="p">.</span><span class="na">waitForCompletion</span><span class="p">(</span><span class="kc">true</span><span class="p">)</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+</code></pre></div>
+
+<p>“这样，我们就定义了输入、Mapper、Combiner、Reducer 与输出路径。”</p>
+<p>国王问：</p>
+<p>“那 MapReduce 是不是比普通 Java Stream 强得多？”</p>
+<p>架构师摇头。</p>
+<p>“它们解决问题的范围不同。”</p>
+<p>“Java Stream 主要是在一个 JVM 的执行环境中表达数据处理流水线。”</p>
+<p>“Hadoop MapReduce 则可以协调多个节点完成分布式数据处理。”</p>
+<p>“但如果数据只有几万条，单机 Java 程序就能快速处理，使用 Hadoop 可能反而带来不必要的调度和 I/O 开销。”</p>
+<blockquote>
+<p>工程原则：数据量大，不一定非要使用 Hadoop；数据量小，更不应该为了使用分布式技术而使用分布式技术。</p>
+</blockquote>
+<h2 id="mapreduce_2">第十三幕：为什么 MapReduce 最终遇到了瓶颈？</h2>
+<p>十年后。</p>
+<p>Hadoop 帝国的威望达到了巅峰。</p>
+<p>它可以在大规模集群中处理海量数据。</p>
+<p>然而，一位新的挑战者悄然出现。</p>
+<p>这位挑战者的名字，叫作 Spark。</p>
+<p>在正式登场之前，国王必须先理解 MapReduce 的局限。</p>
+<h3 id="_13">一、多阶段计算与中间结果物化</h3>
+<p>假设我们需要完成以下任务：</p>
+<ol>
+<li>读取一百 TB 的日志。</li>
+<li>过滤无效记录。</li>
+<li>按用户进行聚合。</li>
+<li>与用户画像数据关联。</li>
+<li>再次聚合。</li>
+<li>输出分析结果。</li>
+</ol>
+<p>在传统 Hadoop MapReduce 执行模型中，复杂处理可能需要串联多个作业。</p>
+<p>而作业之间通常通过文件系统中的物化中间结果衔接。</p>
+<p>这意味着可能出现多轮磁盘读写。</p>
+<p>对于复杂的迭代计算，这些开销尤为明显。</p>
+<h3 id="_14">二、迭代算法不够友好</h3>
+<p>国王问：</p>
+<p>“什么叫迭代计算？”</p>
+<p>架构师回答：</p>
+<p>“例如某些机器学习算法，需要对同一批数据反复计算几十轮。”</p>
+<p>“如果每次都需要重新构建任务、读取中间结果，成本就可能很高。”</p>
+<p>“我们希望复用计算过程中已经得到的数据。”</p>
+<h3 id="spark">三、Spark 的出现</h3>
+<p>架构师继续说道：</p>
+<p>“Spark 引入了更灵活的执行模型。”</p>
+<p>“它支持基于 DAG（有向无环图）的任务执行，以及对数据进行缓存和复用。”</p>
+<p>“对于合适的工作负载，它可以减少不必要的中间数据物化与重复读取。”</p>
+<p>“但不要误以为 Spark 全部在内存里计算。”</p>
+<p>“Spark 同样可能发生磁盘溢写、Shuffle 和数据落盘。”</p>
+<p>“它也不是在所有情况下都比 MapReduce 快。”</p>
+<p>“真正的优势取决于任务结构、资源、数据格式、缓存策略和执行计划。”</p>
+<p>国王终于明白。</p>
+<p>“Hadoop 为帝国建立了分布式存储和批处理的基础。”</p>
+<p>“而 Spark 则进一步改进了许多复杂计算任务的执行方式。”</p>
+<h2 id="_15">第十四幕：首席架构师考核——八道面试题</h2>
+<p>多年后，一名年轻的 Java 后端工程师来到 Hadoop 帝国求职。</p>
+<p>考官将八道题摆在他的面前。</p>
+<div class="quiz" data-quiz="4"></div>
+
+<h2 id="_16">尾声：一道来自东方的火光</h2>
+<p>深夜。</p>
+<p>Spring 王国的国王站在最高的瞭望塔上。</p>
+<p>他已经见识过 MySQL 的事务能力、Redis 的高速缓存、RabbitMQ 的消息缓冲，也终于理解了 Hadoop 的分布式存储与计算体系。</p>
+<p>然而，他还有最后一个疑问。</p>
+<p>“架构师，Hadoop 已经能够把计算分散到一千台机器。”</p>
+<p>“那为什么还有新的计算引擎不断出现？”</p>
+<p>架构师没有回答。</p>
+<p>他只是拿出了一份来自东方的密报。</p>
+<p>密报上写着：</p>
+<p>“某研究团队需要反复分析上百 TB 的数据。”</p>
+<p>“他们使用传统多阶段 MapReduce 作业，每轮都要协调大量任务和中间结果。”</p>
+<p>“而另一支军团，竟然能够把多个计算阶段组织成一张 DAG，并根据需要复用数据。”</p>
+<p>国王抬起头。</p>
+<p>“那支军团叫什么？”</p>
+<p>架构师缓缓说道：</p>
+<p>“Apache Spark。”</p>
+<p>窗外，天边升起了一道蓝色火光。</p>
+<p>一场关于内存、DAG、RDD 和分布式计算执行引擎的新战争，即将开始。</p>
+<h2 id="spark-dag">下一章：《Spark 崛起——内存计算与 DAG 战争》</h2>
+<p>下一章将继续用完整小说叙事，深入讲解 Spark 相关的核心原理：</p>
+<ol>
+<li>RDD 的诞生：为什么需要弹性分布式数据集。</li>
+<li>Transformation 与 Action：为什么调用 <code>map()</code> 之后不一定立即执行计算。</li>
+<li>Lazy Evaluation：惰性计算与执行计划优化。</li>
+<li>DAG Scheduler：如何将复杂任务拆分成 Stage。</li>
+<li>窄依赖与宽依赖：为什么有些操作会触发 Shuffle。</li>
+<li>Spark 内存管理：缓存、持久化、溢写与内存不足。</li>
+<li>DataFrame、Dataset 与 Spark SQL：为什么现代 Spark 不只有 RDD。</li>
+<li>Catalyst 与 Tungsten：Spark 如何优化 SQL 执行。</li>
+<li>数据倾斜与 Join 优化：Broadcast Join、Sort Merge Join、AQE。</li>
+<li>工程实践：如何用 Java 和 PySpark 处理海量订单数据，并排查生产环境中的 Spark OOM、任务倾斜和 Shuffle 失败。</li>
+</ol>
+<p>《数据帝国》第四章·完</p></article><section class="practice"><h2>把原理放进实验</h2><p>调整参数，观察系统如何变化。所有实验均在当前浏览器中运行。</p><a href="practice.html">查看全部交互实验 →</a> · <a href="editorial.html">内容整理与技术校正 →</a></section><nav class="chapter-nav" aria-label="上下章"><a href="chapter-03.html">← 上一章<span>亿级数据之灾——MySQL 巨城的极限</span></a><a href="chapter-05.html">下一章 →<span>Spark 崛起——内存计算与 DAG 战争</span></a></nav></main></div><footer><a href="index.html">数据帝国</a><p>在故事中理解系统，在实验中观察原理。<span>现有 8 章 · 第 9 章待续</span></p><a href="https://github.com/wupzl/data-empire-reader">项目源码 ↗</a></footer>
+<dialog id="search-dialog" aria-labelledby="search-title"><div class="search-top"><h2 id="search-title">在帝国里寻找答案</h2><button id="search-close" aria-label="关闭搜索">关闭 ×</button></div><label for="query">关键词或代码，例如 Redis、背压、Checkpoint</label><input id="query" type="search" autocomplete="off" placeholder="搜索全书正文…"><p id="search-status" role="status">输入关键词，搜索 8 章内容</p><div id="search-results"></div></dialog></body></html>

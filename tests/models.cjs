@@ -1,0 +1,24 @@
+const assert = require('node:assert/strict');
+const m = require('../assets/labs.js');
+assert.equal(m.little(1000,200),200);
+assert.equal(m.little(0,200),0);
+assert.equal(m.queue(2000,1000,10),10000);
+assert.equal(m.queue(0,1000,10,10),0);
+assert.equal(m.drain(80000,100000,3000000),150);
+assert.equal(m.drain(100000,100000,3000000),Infinity);
+assert.equal(m.drain(100000,0,0),0);
+assert.equal(m.capacity(100000,2000,70),72);
+assert.equal(m.capacity(0,2000,70),0);
+assert.equal(m.shard('9007199254740993'),1);
+assert.deepEqual(m.skew(80),[82,2,2,2,2,2,2,2,2,2]);
+assert.equal(m.skew(100).reduce((a,b)=>a+b,0),100);
+assert.deepEqual(m.wordcount('Java Redis Java\nRedis MySQL\nJava MySQL Redis').reduced,[['Java',3],['Redis',3],['MySQL',2]]);
+assert.deepEqual(m.wordcount('').reduced,[]);
+const events=[[2,100],[8,200],[5,50],[17,150],[9,80],[25,300]];
+assert.equal(m.watermark(events,5).sum,350);
+assert.equal(m.watermark(events,5).late,1);
+assert.equal(m.watermark(events,30).sum,430);
+assert.equal(m.watermark([],5).mark,null);
+// A record behind the Watermark can still be accepted when its window remains open.
+assert.equal(m.watermark([[8,200],[2,100]],5).sum,300);
+console.log('PASS: deterministic models and boundary cases.');

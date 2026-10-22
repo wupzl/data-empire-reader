@@ -1,0 +1,50 @@
+[
+  {
+    "number": 1,
+    "title": "帝国崩溃之夜——当一万人同时敲响城门",
+    "topics": "并发与并行 · QPS / RT · 缓存与库存",
+    "minutes": 15
+  },
+  {
+    "number": 2,
+    "title": "Redis 要塞——十万请求与最后一张优惠券",
+    "topics": "Lua · 消息可靠性 · 幂等 · 令牌桶",
+    "minutes": 27
+  },
+  {
+    "number": 3,
+    "title": "亿级数据之灾——MySQL 巨城的极限",
+    "topics": "B+ 树 · 深分页 · 分片 · OLTP / OLAP",
+    "minutes": 29
+  },
+  {
+    "number": 4,
+    "title": "分布式大陆——Hadoop 与 MapReduce 的诞生",
+    "topics": "HDFS · MapReduce · Shuffle · YARN",
+    "minutes": 39
+  },
+  {
+    "number": 5,
+    "title": "Spark 崛起——内存计算与 DAG 战争",
+    "topics": "RDD · DAG · Spark SQL · 执行计划",
+    "minutes": 30
+  },
+  {
+    "number": 6,
+    "title": "实时之河——Kafka 与 Flink 的崛起",
+    "topics": "Kafka · Flink · 事件时间 · Watermark",
+    "minutes": 35
+  },
+  {
+    "number": 7,
+    "title": "背压风暴——千万级实时系统的生死线",
+    "topics": "背压 · Checkpoint · 状态 · 热点治理",
+    "minutes": 27
+  },
+  {
+    "number": 8,
+    "title": "千万级帝国——从零设计真正的高并发直播系统",
+    "topics": "容量规划 · 长连接 · 高可用 · 可观测性",
+    "minutes": 35
+  }
+]

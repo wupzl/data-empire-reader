@@ -1,0 +1,4 @@
+* text=auto
+# Preserve supplied original and upstream vendor bytes exactly.
+source/data-empire-original.md -text -whitespace
+vendor/* -text -whitespace
