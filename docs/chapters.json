@@ -15,7 +15,7 @@
     "number": 3,
     "title": "亿级数据之灾——MySQL 巨城的极限",
     "topics": "B+ 树 · 深分页 · 分片 · OLTP / OLAP",
-    "minutes": 29
+    "minutes": 30
   },
   {
     "number": 4,

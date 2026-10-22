@@ -14,12 +14,12 @@
 <li><a href="#_12">第七幕：主从双城——读写分离能拯救帝国吗？</a></li>
 <li><a href="#oltp">第八幕：数据分析师的请求——为什么 OLTP 不应该承担所有任务？</a></li>
 <li><a href="#clickhouse">第九幕：ClickHouse 与列式存储——只读取真正需要的列</a></li>
-<li><a href="#_17">第十幕：面试官的试炼——亿级数据系统设计</a></li>
-<li><a href="#_20">尾声：数据大陆的另一面</a></li>
+<li><a href="#_15">第十幕：面试官的试炼——亿级数据系统设计</a></li>
+<li><a href="#_18">尾声：数据大陆的另一面</a></li>
 <li><a href="#hadoop-mapreduce">下一章：《分布式大陆——Hadoop 与 MapReduce 的诞生》</a></li>
 </ul>
 </div>
-</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 03 <span>/ 08 · 约 29 分钟</span></p><h1>亿级数据之灾——MySQL 巨城的极限</h1><p class="topics">B+ 树 · 深分页 · 分片 · OLTP / OLAP</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="current" href="chapter-03.html" aria-current="page"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
+</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 03 <span>/ 08 · 约 30 分钟</span></p><h1>亿级数据之灾——MySQL 巨城的极限</h1><p class="topics">B+ 树 · 深分页 · 分片 · OLTP / OLAP</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="current" href="chapter-03.html" aria-current="page"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a></nav><div class="toc">
 <ul>
 <li><a href="#_1">第一幕：一亿条订单，帝国陷入瘫痪</a></li>
 <li><a href="#b">第二幕：B+ 树骑士团——为什么查找一亿条数据不一定慢？</a></li>
@@ -32,8 +32,8 @@
 <li><a href="#_12">第七幕：主从双城——读写分离能拯救帝国吗？</a></li>
 <li><a href="#oltp">第八幕：数据分析师的请求——为什么 OLTP 不应该承担所有任务？</a></li>
 <li><a href="#clickhouse">第九幕：ClickHouse 与列式存储——只读取真正需要的列</a></li>
-<li><a href="#_17">第十幕：面试官的试炼——亿级数据系统设计</a></li>
-<li><a href="#_20">尾声：数据大陆的另一面</a></li>
+<li><a href="#_15">第十幕：面试官的试炼——亿级数据系统设计</a></li>
+<li><a href="#_18">尾声：数据大陆的另一面</a></li>
 <li><a href="#hadoop-mapreduce">下一章：《分布式大陆——Hadoop 与 MapReduce 的诞生》</a></li>
 </ul>
 </div>
@@ -118,6 +118,19 @@
 <p>第二层是区域目录。</p>
 <p>第三层是真正的数据页。</p>
 <h3 id="b_2">简化的 B+ 树结构</h3>
+<div class="codehilite"><pre><span></span><code>                 根节点：范围目录
+                  /           \
+         内部节点 A          内部节点 B
+          /      \            /      \
+       叶子页 1 → 叶子页 2 → 叶子页 3 → 叶子页 4
+       行记录      行记录      行记录      行记录
+</code></pre></div>
+
+<ul>
+<li><strong>从上到下定位</strong>：根据键的范围选择子节点，直到叶子页。</li>
+<li><strong>沿叶子页扫描</strong>：范围查询可以按顺序继续读取相邻叶子页。</li>
+<li><strong>图中的行记录</strong>：以 InnoDB 聚簇索引为例；二级索引的叶子记录包含索引列和主键。</li>
+</ul>
 <p>这是说明多路索引和叶子节点的概念图，并非严格的 InnoDB 页面布局或分隔键示例。</p>
 <p>国王看着层层目录。</p>
 <p>“这和二叉树有什么区别？”</p>
@@ -632,10 +645,35 @@ status 列：
 <p>“而且，同一列的数据类型和取值分布比较接近，通常更容易压缩。”</p>
 <p>这就是列式存储的重要优势之一。</p>
 <h3 id="_14">行式与列式的区别</h3>
-<h3 id="_15">行式存储</h3>
-<p>同一行的数据组织在一起，适合常见的事务型点查和行更新。</p>
-<h3 id="_16">列式存储</h3>
-<p>同一列的数据组织在一起，适合大规模扫描和列聚合。</p>
+<table>
+<thead>
+<tr>
+<th>对比维度</th>
+<th>行式存储</th>
+<th>列式存储</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数据组织</td>
+<td>同一行的字段放在一起</td>
+<td>同一列的值放在一起</td>
+</tr>
+<tr>
+<td>常见优势</td>
+<td>事务型点查、整行读取与更新</td>
+<td>大规模扫描、少量列聚合</td>
+</tr>
+<tr>
+<td>查询示例</td>
+<td>按订单 ID 读取一笔订单</td>
+<td>汇总大量订单的金额列</td>
+</tr>
+</tbody>
+</table>
+<p><strong>行式示意</strong>：<code>订单1：ID / 用户 / 金额</code> → <code>订单2：ID / 用户 / 金额</code></p>
+<p><strong>列式示意</strong>：<code>ID列：1 / 2</code>；<code>用户列：A / B</code>；<code>金额列：100 / 200</code></p>
+<p>以上为逻辑布局示意；真实数据库还有页、压缩、索引等组织机制。</p>
 <p>架构师继续说道：</p>
 <p>“例如 ClickHouse 是面向分析场景设计的列式数据库。”</p>
 <p>“它可以利用列式读取、压缩、向量化执行以及并行处理等机制来提升许多分析查询的效率。”</p>
@@ -668,7 +706,7 @@ BI 报表 / 实时看板
 <p>“所以，帝国开始从单一数据库，走向多种存储系统协作。”</p>
 <p>“没错。”</p>
 <p>“而这，就是大数据时代真正的开端。”</p>
-<h2 id="_17">第十幕：面试官的试炼——亿级数据系统设计</h2>
+<h2 id="_15">第十幕：面试官的试炼——亿级数据系统设计</h2>
 <p>多年后，一名年轻工程师前来应聘帝国数据库架构师。</p>
 <p>考官提出第一道问题。</p>
 <p>“现在有一张一亿行的订单表，查询很慢，你会怎么办？”</p>
@@ -680,7 +718,7 @@ BI 报表 / 实时看板
 <p>架构师走上前。</p>
 <p>“不要遇到一亿条数据就直接分库分表。”</p>
 <p>“先定位问题，再决定优化手段。”</p>
-<h3 id="_18">面试回答思路</h3>
+<h3 id="_16">面试回答思路</h3>
 <p>第一步：确认慢在哪里。</p>
 <p>查看慢查询日志、SQL 执行计划和实际访问的数据量。</p>
 <p>判断是全表扫描、索引不合理、排序、回表、锁等待，还是 CPU、内存、磁盘等资源瓶颈。</p>
@@ -697,10 +735,10 @@ BI 报表 / 实时看板
 <p>只有当负载、容量或隔离需求真正达到相应阶段，再考虑引入更复杂的分布式数据库架构。</p>
 <p>第六步：区分交易和分析负载。</p>
 <p>如果慢查询的根源是大型统计与聚合任务，就要评估独立分析库、数仓或数据湖体系。</p>
-<h3 id="_19">七道高频面试追问</h3>
+<h3 id="_17">七道高频面试追问</h3>
 <div class="quiz" data-quiz="3"></div>
 
-<h2 id="_20">尾声：数据大陆的另一面</h2>
+<h2 id="_18">尾声：数据大陆的另一面</h2>
 <p>深夜。</p>
 <p>Spring 王国的最高瞭望塔上，国王 Java 与架构师并肩而立。</p>
 <p>下方是灯火辉煌的 MySQL 城。</p>
