@@ -21,3 +21,4 @@ article .concept-note{font-size:.75em;color:var(--muted);line-height:1.9;margin:
 @media(max-width:700px){.concept{margin:22px 0;padding:16px}.concept-flow>li{padding:11px 13px}}
 
 article .concept-blocks .concept-flow{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.concept-blocks .concept-flow>li+li:before{content:none}@media(max-width:700px){article .concept-blocks .concept-flow{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.lab input[type=checkbox]{width:18px;height:18px;align-self:flex-start;padding:0;accent-color:var(--accent)}

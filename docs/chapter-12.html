@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="description" content="数据帝国：以 Java 后端工程师的视角，在小说和交互实验中理解高并发与大数据。现有 12 章，第 13 章待续。"><title>终极工程——从一台 Spring Boot 到十万 QPS 的生产战场 · 数据帝国</title><script>try{document.documentElement.dataset.theme=localStorage.getItem('de-theme')||'light';document.documentElement.style.setProperty('--reader-size',Math.max(14,Math.min(26,Number(localStorage.getItem('de-size'))||18))+'px')}catch(e){}</script><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="shelf-nav.css"><link rel="stylesheet" href="labs.css"><script src="app.js" defer></script><script src="labs.js" defer></script><script src="quizzes.js" defer></script><script src="white-theme.js" defer></script></head>
+<body data-chapter="12" data-count="12"><a class="skip" href="#main">跳到正文</a><div id="progress" aria-hidden="true"></div><header class="topbar"><a class="brand" href="index.html"><span class="emblem" aria-hidden="true">D<span>↗</span></span><span>数据帝国<small>THE DATA EMPIRE</small></span></a><nav class="shelf-nav" aria-label="学习项目导航"><a class="shelf-home" href="/">← 学习书架</a><details class="shelf-switch"><summary>切换项目 ▾</summary><div class="shelf-menu"><a href="/pytorch-apprentice/">PyTorch：炼金术士的学徒</a><a href="/ai-era-reader/">AI 纪元</a><a href="/data-empire-reader/" aria-current="true">数据帝国</a><a href="/rag-empire-reader/">RAG 帝国</a></div></details></nav><div class="controls"><button id="search-open" aria-label="搜索全书">搜索 <kbd>/</kbd></button><button id="smaller" aria-label="缩小字号">A−</button><button id="larger" aria-label="增大字号">A＋</button><button id="theme" aria-label="切换深浅色主题">◐</button></div></header>
+<div class="reader-layout"><aside class="sidebar"><p class="eyebrow">THE EMPIRE’S JOURNEY</p><nav aria-label="全书章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a><a class="" href="chapter-09.html"><span>09</span>数据仓库之城——从混乱日志到可信指标</a><a class="" href="chapter-10.html"><span>10</span>OLAP 王座——ClickHouse、StarRocks 与百亿级分析战争</a><a class="" href="chapter-11.html"><span>11</span>资源之战——高并发与大数据的成本极限</a><a class="current" href="chapter-12.html" aria-current="page"><span>12</span>终极工程——从一台 Spring Boot 到十万 QPS 的生产战场</a></nav><details class="local-toc" open><summary>本章线索</summary><div class="toc">
+<ul>
+<li><a href="#_1">第一幕：只有一台服务器的王国</a></li>
+<li><a href="#_3">第二幕：第一份代码——一场注定发生的超卖</a></li>
+<li><a href="#_8">第三幕：第一次压测——数据库撑不住了</a></li>
+<li><a href="#redis">第四幕：Redis 要塞重建——把无效请求挡在数据库之外</a></li>
+<li><a href="#_10">第五幕：可靠消息之战——跨系统事务没有魔法</a></li>
+<li><a href="#_12">第六幕：消息队列——数据库不应该承担所有后续工作</a></li>
+<li><a href="#websocket">第七幕：WebSocket 军团——百万连接不等于百万线程</a></li>
+<li><a href="#mysqlkafkaflinkclickhouse">第八幕：实时数据长河——MySQL、Kafka、Flink、ClickHouse 会师</a></li>
+<li><a href="#_20">实时订单分析链路</a></li>
+<li><a href="#kubernetes">第九幕：Kubernetes 调度中心——让工程真正部署起来</a></li>
+<li><a href="#_22">第十幕：可观测性法庭——怎样知道系统到底出了什么问题？</a></li>
+<li><a href="#qps">第十一幕：最后一次压测——十万 QPS 的真相</a></li>
+<li><a href="#_26">终极压测 · 虚构验收记录</a></li>
+<li><a href="#_28">第十二幕：最终考核——面试官不再满足于背诵八股</a></li>
+<li><a href="#_29">尾声：一张架构图，无法证明一座帝国</a></li>
+<li><a href="#_30">待续 · 第十三章预告：永不崩溃的防线——性能回归、灰度发布与混沌工程</a></li>
+</ul>
+</div>
+</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 12 <span>/ 12 · 约 36 分钟</span></p><h1>终极工程——从一台 Spring Boot 到十万 QPS 的生产战场</h1><p class="topics">条件更新 · Outbox · 幂等 · 部署 · 分层压测</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a><a class="" href="chapter-09.html"><span>09</span>数据仓库之城——从混乱日志到可信指标</a><a class="" href="chapter-10.html"><span>10</span>OLAP 王座——ClickHouse、StarRocks 与百亿级分析战争</a><a class="" href="chapter-11.html"><span>11</span>资源之战——高并发与大数据的成本极限</a><a class="current" href="chapter-12.html" aria-current="page"><span>12</span>终极工程——从一台 Spring Boot 到十万 QPS 的生产战场</a></nav><div class="toc">
+<ul>
+<li><a href="#_1">第一幕：只有一台服务器的王国</a></li>
+<li><a href="#_3">第二幕：第一份代码——一场注定发生的超卖</a></li>
+<li><a href="#_8">第三幕：第一次压测——数据库撑不住了</a></li>
+<li><a href="#redis">第四幕：Redis 要塞重建——把无效请求挡在数据库之外</a></li>
+<li><a href="#_10">第五幕：可靠消息之战——跨系统事务没有魔法</a></li>
+<li><a href="#_12">第六幕：消息队列——数据库不应该承担所有后续工作</a></li>
+<li><a href="#websocket">第七幕：WebSocket 军团——百万连接不等于百万线程</a></li>
+<li><a href="#mysqlkafkaflinkclickhouse">第八幕：实时数据长河——MySQL、Kafka、Flink、ClickHouse 会师</a></li>
+<li><a href="#_20">实时订单分析链路</a></li>
+<li><a href="#kubernetes">第九幕：Kubernetes 调度中心——让工程真正部署起来</a></li>
+<li><a href="#_22">第十幕：可观测性法庭——怎样知道系统到底出了什么问题？</a></li>
+<li><a href="#qps">第十一幕：最后一次压测——十万 QPS 的真相</a></li>
+<li><a href="#_26">终极压测 · 虚构验收记录</a></li>
+<li><a href="#_28">第十二幕：最终考核——面试官不再满足于背诵八股</a></li>
+<li><a href="#_29">尾声：一张架构图，无法证明一座帝国</a></li>
+<li><a href="#_30">待续 · 第十三章预告：永不崩溃的防线——性能回归、灰度发布与混沌工程</a></li>
+</ul>
+</div>
+</details><article><blockquote>
+<p>阅读提示：本章是工程蓝图与代码片段，不是已经交付或压测过的完整后端项目。Compose、Kubernetes 和 k6 示例需配套应用、配置和环境；十万 QPS 只表示小说中的分层测试目标。</p>
+</blockquote>
+<p>上一章，Spring 王国终于控制住了资源成本。线程池不再无限膨胀，数据库连接受到约束，Flink 与 Spark 不再肆意争夺计算资源，Kubernetes 开始承担弹性调度的职责。</p>
+<p>国王 Java 原本以为，自己已经成为一名真正的架构师。</p>
+<p>直到有一天，他收到了一份来自帝国工程委员会的挑战书。</p>
+<p>“请在一座空白的服务器上，从零开始构建一套高并发交易系统。”</p>
+<p>“必须能够解释每一处并发风险，证明每一项优化有效，并在故障发生时保证核心业务数据正确。”</p>
+<p>挑战书的最后一行，只有一句话。</p>
+<p>“禁止只交架构图。”</p>
+<h2 id="_1">第一幕：只有一台服务器的王国</h2>
+<p>数据大陆，初春。</p>
+<p>帝国最大的计算大厅里，数百名工程师正在等待最终考核。</p>
+<p>首席架构师站在台上，宣布规则。</p>
+<p>“诸位，今天我们不使用现成的千万级平台。”</p>
+<p>“我们要从一个最普通的 Java 项目开始。”</p>
+<p>他指向角落里的一台服务器。</p>
+<p>“四核 CPU。”</p>
+<p>“八 GB 内存。”</p>
+<p>“一套 Spring Boot 服务。”</p>
+<p>“一个 MySQL 数据库。”</p>
+<p>“我们的目标，是逐步演化出一套能够承受真实业务压力的分布式系统。”</p>
+<p>年轻工程师林澈走上前。</p>
+<p>“老师，最终要达到多少 QPS？”</p>
+<p>架构师回答：</p>
+<p>“这不是一个可以提前承诺的数字。”</p>
+<p>“我们以十万 QPS 的活动入口流量作为目标场景，但必须区分入口请求、真正的库存竞争、异步订单创建和数据库持久化吞吐。”</p>
+<p>“如果最终压测没有达到目标，我们就必须如实报告瓶颈。”</p>
+<p>国王 Java 点头。</p>
+<p>“很好。”</p>
+<p>“工程不能靠编造数字取胜。”</p>
+<h3 id="_2">第一份工程蓝图</h3>
+<div class="codehilite"><pre><span></span><code>data-empire/
+├── order-service/
+│   ├── controller/
+│   ├── service/
+│   ├── repository/
+│   ├── domain/
+│   └── config/
+├── common/
+├── sql/
+├── scripts/
+├── observability/
+├── docker/
+└── load-test/
+</code></pre></div>
+
+<p>“第一阶段，我们只构建订单与库存。”</p>
+<p>“先让它正确工作，再寻找性能极限。”</p>
+<h2 id="_3">第二幕：第一份代码——一场注定发生的超卖</h2>
+<p>林澈很快写出第一版数据库表。</p>
+<div class="codehilite"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">product_stock</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">product_id</span><span class="w"> </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<span class="w">    </span><span class="n">available</span><span class="w"> </span><span class="nb">INT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="k">version</span><span class="w"> </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="k">CHECK</span><span class="w"> </span><span class="p">(</span><span class="n">available</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span>
+<span class="p">);</span>
+
+<span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">orders</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<span class="w">    </span><span class="n">request_id</span><span class="w"> </span><span class="nb">VARCHAR</span><span class="p">(</span><span class="mi">64</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">user_id</span><span class="w"> </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">product_id</span><span class="w"> </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">status</span><span class="w"> </span><span class="nb">VARCHAR</span><span class="p">(</span><span class="mi">32</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+
+<span class="w">    </span><span class="k">UNIQUE</span><span class="w"> </span><span class="k">KEY</span><span class="w"> </span><span class="n">uk_request</span><span class="w"> </span><span class="p">(</span><span class="n">request_id</span><span class="p">)</span>
+<span class="p">);</span>
+</code></pre></div>
+
+<p>架构师看了一眼。</p>
+<p>“不错。库存不能为负，订单请求也需要唯一标识。”</p>
+<p>“现在写业务逻辑。”</p>
+<p>林澈写道：</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">buy</span><span class="p">(</span><span class="kt">long</span><span class="w"> </span><span class="n">productId</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">stock</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stockMapper</span><span class="p">.</span><span class="na">selectStock</span><span class="p">(</span><span class="n">productId</span><span class="p">);</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">stock</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">throw</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">SoldOutException</span><span class="p">();</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="n">stockMapper</span><span class="p">.</span><span class="na">decrease</span><span class="p">(</span><span class="n">productId</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>国王问：</p>
+<p>“这段代码有问题吗？”</p>
+<p>林澈回答：</p>
+<p>“单线程运行正常。”</p>
+<p>架构师笑了。</p>
+<p>“那我们用两个并发线程测试。”</p>
+<h3 id="_4">库存只剩一件</h3>
+<h3 id="_5">并发超卖实验</h3>
+<div class="lab" data-lab="stocksql"></div>
+
+<p>国王猛地拍桌。</p>
+<p>“这是典型的竞态条件！”</p>
+<p>架构师点头。</p>
+<p>“所以第一步，不是加 Redis。”</p>
+<p>“而是先用 MySQL 自己提供的原子更新能力保证正确性。”</p>
+<h3 id="_6">用条件更新保护库存</h3>
+<div class="codehilite"><pre><span></span><code><span class="k">UPDATE</span><span class="w"> </span><span class="n">product_stock</span>
+<span class="k">SET</span><span class="w"> </span><span class="n">available</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">available</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">product_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">?</span>
+<span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">available</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+</code></pre></div>
+
+<p>“这条 UPDATE 的检查与修改由数据库以一条语句完成。”</p>
+<p>“如果影响行数为 1，说明本次成功扣减。”</p>
+<p>“如果为 0，说明没有符合条件的库存记录。”</p>
+<p>“这比把库存读出来、在 Java 代码中判断、再无条件 UPDATE 更可靠。”</p>
+<h3 id="_7">把库存与订单放入同一个事务</h3>
+<div class="codehilite"><pre><span></span><code><span class="nd">@Service</span>
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">OrderService</span><span class="w"> </span><span class="p">{</span>
+
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">StockMapper</span><span class="w"> </span><span class="n">stockMapper</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">OrderMapper</span><span class="w"> </span><span class="n">orderMapper</span><span class="p">;</span>
+
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="nf">OrderService</span><span class="p">(</span>
+<span class="w">            </span><span class="n">StockMapper</span><span class="w"> </span><span class="n">stockMapper</span><span class="p">,</span>
+<span class="w">            </span><span class="n">OrderMapper</span><span class="w"> </span><span class="n">orderMapper</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">this</span><span class="p">.</span><span class="na">stockMapper</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stockMapper</span><span class="p">;</span>
+<span class="w">        </span><span class="k">this</span><span class="p">.</span><span class="na">orderMapper</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">orderMapper</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nd">@Transactional</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">createOrder</span><span class="p">(</span><span class="n">CreateOrderCommand</span><span class="w"> </span><span class="n">cmd</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kt">int</span><span class="w"> </span><span class="n">changed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stockMapper</span><span class="p">.</span><span class="na">decreaseIfAvailable</span><span class="p">(</span>
+<span class="w">                </span><span class="n">cmd</span><span class="p">.</span><span class="na">productId</span><span class="p">());</span>
+
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">changed</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">throw</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">SoldOutException</span><span class="p">();</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="n">orderMapper</span><span class="p">.</span><span class="na">insert</span><span class="p">(</span><span class="n">cmd</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>架构师提醒：</p>
+<p>“这段代码依赖 Spring 事务代理正常生效，并假设两个 Mapper 操作参与同一个数据库事务。”</p>
+<p>“数据库插入失败时，事务回滚，前面的库存扣减也要回滚。”</p>
+<p>“如果发生唯一键冲突，还需要明确重复请求应该返回原结果还是业务错误。”</p>
+<p>“不要简单地把所有异常吞掉，然后继续提交事务。”</p>
+<p>林澈松了一口气。</p>
+<p>“至少现在不会因为 Java 层面的并发判断而超卖了。”</p>
+<p>“正确。”</p>
+<p>“但性能战争才刚刚开始。”</p>
+<h2 id="_8">第三幕：第一次压测——数据库撑不住了</h2>
+<p>三天后。</p>
+<p>林澈使用 k6 编写了第一份压力测试。</p>
+<div class="codehilite"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="nx">http</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;k6/http&#39;</span><span class="p">;</span>
+<span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">check</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;k6&#39;</span><span class="p">;</span>
+
+<span class="k">export</span><span class="w"> </span><span class="kd">const</span><span class="w"> </span><span class="nx">options</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">scenarios</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">order_load</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nx">executor</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;constant-arrival-rate&#39;</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">rate</span><span class="o">:</span><span class="w"> </span><span class="mf">1000</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">timeUnit</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;1s&#39;</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">duration</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;2m&#39;</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">preAllocatedVUs</span><span class="o">:</span><span class="w"> </span><span class="mf">200</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">maxVUs</span><span class="o">:</span><span class="w"> </span><span class="mf">1000</span><span class="p">,</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="p">};</span>
+
+<span class="k">export</span><span class="w"> </span><span class="k">default</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">payload</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span>
+<span class="w">    </span><span class="nx">productId</span><span class="o">:</span><span class="w"> </span><span class="mf">1001</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">requestId</span><span class="o">:</span><span class="w"> </span><span class="sb">`test-</span><span class="si">${</span><span class="nx">__VU</span><span class="si">}</span><span class="sb">-</span><span class="si">${</span><span class="nx">__ITER</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span>
+<span class="w">  </span><span class="p">});</span>
+
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span>
+<span class="w">    </span><span class="s1">&#39;http://localhost:8080/api/orders&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">payload</span><span class="p">,</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nx">headers</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="s1">&#39;Content-Type&#39;</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;application/json&#39;</span><span class="p">,</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">  </span><span class="p">);</span>
+
+<span class="w">  </span><span class="nx">check</span><span class="p">(</span><span class="nx">response</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="s1">&#39;expected status&#39;</span><span class="o">:</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="p">=&gt;</span>
+<span class="w">      </span><span class="p">[</span><span class="mf">200</span><span class="p">,</span><span class="w"> </span><span class="mf">201</span><span class="p">,</span><span class="w"> </span><span class="mf">202</span><span class="p">,</span><span class="w"> </span><span class="mf">409</span><span class="p">,</span><span class="w"> </span><span class="mf">429</span><span class="p">].</span><span class="nx">includes</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="p">),</span>
+<span class="w">  </span><span class="p">});</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>架构师说道：</p>
+<p>“这里采用恒定到达率模型。”</p>
+<p>“不过实际业务接口还需要用户身份、权限、测试数据和正确的业务状态校验。”</p>
+<p>“测试必须运行在隔离环境，不能无防护地向真实交易系统创建订单。”</p>
+<p>“此外，k6 的 <code>dropped_iterations</code> 必须监控。否则压测器自己发不出目标流量，会让结果产生误导。”</p>
+<h3 id="_9">第一份压测结果</h3>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>第一轮虚构结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>请求到达速率</td>
+<td>1,000 / 秒</td>
+</tr>
+<tr>
+<td>成功处理速率</td>
+<td>620 / 秒</td>
+</tr>
+<tr>
+<td>P99</td>
+<td>2.8 秒</td>
+</tr>
+<tr>
+<td>数据库连接池</td>
+<td>接近满载</td>
+</tr>
+</tbody>
+</table>
+<p>仅用于模拟系统演化，不是实际测得的 Spring Boot 或 MySQL 性能数据。</p>
+<p>国王看着结果。</p>
+<p>“只有 620 QPS？”</p>
+<p>“为什么？”</p>
+<p>架构师让林澈打开监控。</p>
+<p>数据库连接等待时间持续上升。</p>
+<p>大量事务争夺同一行库存。</p>
+<p>部分请求开始超时。</p>
+<p>“陛下，这说明真实瓶颈并不只是 Java 服务器算不过来。”</p>
+<p>“可能还包括数据库连接、热点行锁竞争和事务吞吐。”</p>
+<p>国王问：</p>
+<p>“我们把连接池从 30 增加到 1000？”</p>
+<p>“先不要。”</p>
+<p>“增加连接数可能让更多请求同时进入数据库竞争同一行，反而扩大锁等待。”</p>
+<p>“下一步，我们要做架构分流。”</p>
+<h2 id="redis">第四幕：Redis 要塞重建——把无效请求挡在数据库之外</h2>
+<p>架构师召见 Redis 将军。</p>
+<p>“此次战争，你的任务不是替代 MySQL 的所有事务。”</p>
+<p>“而是在大规模秒杀入口，快速完成资格与库存预占。”</p>
+<h3 id="redis-lua">Redis Lua 原子预占</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1">-- KEYS[1]: coupon:{1001}:stock</span>
+<span class="c1">-- KEYS[2]: coupon:{1001}:users</span>
+<span class="c1">-- ARGV[1]: userId</span>
+
+<span class="kd">local</span> <span class="n">stock</span> <span class="o">=</span> <span class="nb">tonumber</span><span class="p">(</span><span class="n">redis</span><span class="p">.</span><span class="n">call</span><span class="p">(</span><span class="s1">&#39;GET&#39;</span><span class="p">,</span> <span class="n">KEYS</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+
+<span class="kr">if</span> <span class="n">stock</span> <span class="o">==</span> <span class="kc">nil</span> <span class="ow">or</span> <span class="n">stock</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="kr">then</span>
+    <span class="kr">return</span> <span class="mi">1</span>
+<span class="kr">end</span>
+
+<span class="kr">if</span> <span class="n">redis</span><span class="p">.</span><span class="n">call</span><span class="p">(</span><span class="s1">&#39;SISMEMBER&#39;</span><span class="p">,</span> <span class="n">KEYS</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">ARGV</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">==</span> <span class="mi">1</span> <span class="kr">then</span>
+    <span class="kr">return</span> <span class="mi">2</span>
+<span class="kr">end</span>
+
+<span class="n">redis</span><span class="p">.</span><span class="n">call</span><span class="p">(</span><span class="s1">&#39;DECR&#39;</span><span class="p">,</span> <span class="n">KEYS</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<span class="n">redis</span><span class="p">.</span><span class="n">call</span><span class="p">(</span><span class="s1">&#39;SADD&#39;</span><span class="p">,</span> <span class="n">KEYS</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">ARGV</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+<span class="kr">return</span> <span class="mi">0</span>
+</code></pre></div>
+
+<p>架构师说道：</p>
+<p>“这能够在 Redis 内部原子地执行库存检查、重复领取检查与预扣减。”</p>
+<p>“但 Lua 原子性不等于跨 Redis、消息队列、MySQL 的完整事务。”</p>
+<p>“现在，真正危险的地方来了。”</p>
+<p>国王问：</p>
+<p>“哪里？”</p>
+<p>架构师在地图上画了一条红线。</p>
+<div class="codehilite"><pre><span></span><code>Redis 预扣成功
+       ↓
+应用进程崩溃
+       ↓
+履约消息还没可靠保存
+</code></pre></div>
+
+<p>“如果没有恢复机制，就可能出现库存已经减少，却没有对应订单记录的情况。”</p>
+<p>国王沉默。</p>
+<p>“那么，我们需要可靠消息。”</p>
+<p>“是的。”</p>
+<p>“但我们不能简单写一句‘Redis 扣减成功后发送 MQ’，然后就认为系统已经可靠。”</p>
+<h2 id="_10">第五幕：可靠消息之战——跨系统事务没有魔法</h2>
+<p>架构师向国王提出两个不同的技术路线。</p>
+<h3 id="a-outbox">路线 A：数据库事务 + Outbox</h3>
+<p>“如果我们更关注实现边界清晰、可证明的一致性，可以先让 MySQL 处理权威库存预占，并在同一数据库事务中写入 Outbox。”</p>
+<div class="codehilite"><pre><span></span><code>用户请求
+    ↓
+MySQL 事务
+    ├── 条件扣减库存
+    ├── 写入订单记录
+    └── 写入 Outbox
+    ↓
+提交成功
+    ↓
+Outbox 发布器
+    ↓
+Kafka / RabbitMQ
+    ↓
+后续异步业务
+</code></pre></div>
+
+<p>优点是事务边界清楚。</p>
+<p>业务状态与待发布事件可以原子提交。</p>
+<p>缺点是所有成功的入口写入仍然需要经过 MySQL，因此数据库必须能够承担实际写入吞吐。</p>
+<h3 id="bredis">路线 B：Redis 预占 + 可恢复的异步履约</h3>
+<p>“如果秒杀入口规模极大，我们希望大部分无效请求在 Redis 被拒绝，那么可以考虑 Redis 预占。”</p>
+<p>“但需要配套设计可靠任务记录、消息投递确认、恢复扫描与补偿对账。”</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>用户请求
+    ↓
+Redis 原子预占并记录预占状态
+    ↓
+可靠的履约任务转移
+    ↓
+消息队列
+    ↓
+消费者幂等写 MySQL
+    ↓
+履约成功 / 失败补偿
+    ↓
+定期对账
+</code></pre></div>
+
+<p>架构师特别强调：</p>
+<p>“这里的‘可靠任务转移’不是一句话就能实现的。”</p>
+<p>“需要明确 Redis 的持久化与故障恢复能力、任务状态记录格式、哪些状态必须恢复、消息发布前崩溃如何扫描，以及补偿如何避免重复返还库存。”</p>
+<p>“如果这些机制不完善，宁愿采用简单而正确的数据库方案。”</p>
+<h3 id="_11">两种路线怎么选？</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>MySQL + Outbox</th>
+<th>Redis 预占 + 异步履约</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>一致性边界</td>
+<td>较清晰</td>
+<td>跨系统故障窗口更多</td>
+</tr>
+<tr>
+<td>成功请求入口写入压力</td>
+<td>较高</td>
+<td>可以将部分工作移到异步链路</td>
+</tr>
+<tr>
+<td>实现复杂度</td>
+<td>相对可控</td>
+<td>通常更高</td>
+</tr>
+<tr>
+<td>失败恢复</td>
+<td>依托数据库事务与 Outbox</td>
+<td>需要预占状态恢复与补偿</td>
+</tr>
+<tr>
+<td>适合情况</td>
+<td>数据库容量足够、正确性优先</td>
+<td>经过压测证明需要更高入口吞吐</td>
+</tr>
+</tbody>
+</table>
+<p>国王终于意识到：</p>
+<p>“性能优化不能依靠牺牲正确性换取漂亮的 QPS。”</p>
+<p>“正是。”</p>
+<h2 id="_12">第六幕：消息队列——数据库不应该承担所有后续工作</h2>
+<p>经过一周的讨论，工程委员会决定采用分层方案。</p>
+<p>对于抢购活动，入口负责资格判断与预占。</p>
+<p>对于订单主事务，仍保留数据库的权威约束。</p>
+<p>对于通知、积分、运营事件等后续任务，则使用消息队列解耦。</p>
+<p>国王问：</p>
+<p>“为什么不在创建订单后，同步完成所有事情？”</p>
+<p>架构师拿出一张清单。</p>
+<div class="codehilite"><pre><span></span><code>创建订单
+   ↓
+扣减库存
+   ↓
+写入交易记录
+   ↓
+发送短信
+   ↓
+发放积分
+   ↓
+更新用户画像
+   ↓
+更新实时成交额
+</code></pre></div>
+
+<p>“陛下，假设短信服务需要两秒才能返回。”</p>
+<p>“难道用户创建订单也要多等待两秒？”</p>
+<p>国王摇头。</p>
+<p>“没有必要。”</p>
+<h3 id="_13">一、拆分同步链路与异步链路</h3>
+<p>架构师重新划分。</p>
+<h3 id="_14">订单核心事务与异步事件</h3>
+<table>
+<thead>
+<tr>
+<th>路径</th>
+<th>核心步骤</th>
+<th>边界</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>同步核心事务</td>
+<td>条件扣减库存、创建订单、写入 Outbox</td>
+<td>同一数据库事务保护核心事实</td>
+</tr>
+<tr>
+<td>异步派生任务</td>
+<td>短信、积分、用户画像、实时统计</td>
+<td>事件可靠发布，消费端幂等与重试</td>
+</tr>
+</tbody>
+</table>
+<p>异步任务不应被误画为必须依次完成的同步步骤。不同派生任务可以独立消费同一业务事件。</p>
+<h3 id="_15">二、消费者必须幂等</h3>
+<p>林澈写出订单事件消费逻辑。</p>
+<div class="codehilite"><pre><span></span><code><span class="nd">@Transactional</span>
+<span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">handle</span><span class="p">(</span><span class="n">OrderCreatedEvent</span><span class="w"> </span><span class="n">event</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">processedMapper</span><span class="p">.</span><span class="na">exists</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="na">eventId</span><span class="p">()))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="n">pointsMapper</span><span class="p">.</span><span class="na">addPoints</span><span class="p">(</span>
+<span class="w">        </span><span class="n">event</span><span class="p">.</span><span class="na">userId</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">event</span><span class="p">.</span><span class="na">points</span><span class="p">()</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="n">processedMapper</span><span class="p">.</span><span class="na">insert</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="na">eventId</span><span class="p">());</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>架构师看了一眼。</p>
+<p>“这还不够严谨。”</p>
+<p>“为什么？”</p>
+<p>“两个消费者可能同时执行 <code>exists</code>，结果都发现未处理。”</p>
+<p>“然后它们都发放积分。”</p>
+<p>林澈愣住。</p>
+<p>“那我们应该依赖数据库唯一约束？”</p>
+<p>“正确。”</p>
+<p>架构师修改方案：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">processed_event</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">event_id</span><span class="w"> </span><span class="nb">VARCHAR</span><span class="p">(</span><span class="mi">64</span><span class="p">)</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<span class="w">    </span><span class="n">processed_at</span><span class="w"> </span><span class="n">DATETIME</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span>
+<span class="p">);</span>
+</code></pre></div>
+
+<p>然后将“抢占事件处理权”和“发放积分”放进同一事务。</p>
+<div class="codehilite"><pre><span></span><code><span class="nd">@Transactional</span>
+<span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">handle</span><span class="p">(</span><span class="n">OrderCreatedEvent</span><span class="w"> </span><span class="n">event</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">inserted</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">processedMapper</span><span class="p">.</span><span class="na">insertIfAbsent</span><span class="p">(</span>
+<span class="w">        </span><span class="n">event</span><span class="p">.</span><span class="na">eventId</span><span class="p">()</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">inserted</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="n">pointsMapper</span><span class="p">.</span><span class="na">addPoints</span><span class="p">(</span>
+<span class="w">        </span><span class="n">event</span><span class="p">.</span><span class="na">userId</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">event</span><span class="p">.</span><span class="na">points</span><span class="p">()</span>
+<span class="w">    </span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>“这里假设 <code>insertIfAbsent</code> 由数据库唯一约束实现原子去重，并且积分更新与去重记录参加同一个本地事务。”</p>
+<p>“如果积分发放涉及外部服务，那就不是这个本地事务能直接保证的事情了。”</p>
+<p>“因此，真实设计还要根据副作用的所在系统选择相应的幂等或协调方案。”</p>
+<h3 id="_16">三、为什么先完成事务，再确认消息？</h3>
+<p>架构师继续解释：</p>
+<p>“如果消费者先 ACK，之后数据库事务失败，消息可能无法重新投递。”</p>
+<p>“如果数据库提交成功之后再 ACK，虽然可能重复投递，但可以通过幂等去重。”</p>
+<p>“对于业务任务，通常更容易接受至少一次投递，并在业务层保证重复处理安全。”</p>
+<p>“不过，重试必须有上限或可控的退避策略。”</p>
+<p>“不能让一个永久失败的消息无限占用消费资源。”</p>
+<h2 id="websocket">第七幕：WebSocket 军团——百万连接不等于百万线程</h2>
+<p>又过了一个月。</p>
+<p>交易功能终于稳定。</p>
+<p>但天穹直播平台的产品经理提出了新要求。</p>
+<p>“陛下，用户进入直播间后，要实时收到弹幕、点赞数量与订单成交提示。”</p>
+<p>国王看向林澈。</p>
+<p>“怎么实现？”</p>
+<p>林澈回答：</p>
+<p>“WebSocket。”</p>
+<p>“很好。”</p>
+<p>“但如果有一百万条连接呢？”</p>
+<p>林澈犹豫了一下。</p>
+<p>“需要一百万个线程？”</p>
+<p>Netty 将军立即走上前。</p>
+<p>“不需要。”</p>
+<h3 id="_17">一、事件驱动的连接管理</h3>
+<p>Netty 展开一张图纸。</p>
+<div class="codehilite"><pre><span></span><code>100 万用户
+     ↓
+入口负载均衡
+     ↓
+WebSocket Gateway 集群
+     ├── Gateway A：维护部分连接
+     ├── Gateway B：维护部分连接
+     ├── Gateway C：维护部分连接
+     └── ...
+</code></pre></div>
+
+<p>“使用非阻塞 I/O 与事件循环，一个线程可以管理多个 Channel。”</p>
+<p>“但这不代表连接没有成本。”</p>
+<p>“每条连接仍然需要一定的内核与应用资源。”</p>
+<p>“消息发送时，还需要足够的网络带宽。”</p>
+<h3 id="_18">二、怎样向一个直播间广播消息？</h3>
+<p>Netty 将军继续解释。</p>
+<p>“如果用户向房间 1001 发送弹幕，不能简单要求每台 Gateway 都扫描全部连接。”</p>
+<p>“需要维护房间与连接的订阅关系。”</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>Room 1001
+  Gateway A：3000 个连接
+  Gateway B：5000 个连接
+  Gateway C：2000 个连接
+</code></pre></div>
+
+<p>“消息分发层将弹幕发送给持有房间订阅者的 Gateway。”</p>
+<p>“每个 Gateway 再向本地连接广播。”</p>
+<h3 id="_19">三、慢客户端保护</h3>
+<p>突然，一名工程师报告：</p>
+<p>“某些用户的网络非常慢，WebSocket 待发送队列不断增长！”</p>
+<p>架构师立刻下令：</p>
+<p>“不能无限缓冲。”</p>
+<p>“对于普通弹幕，可以考虑丢弃过时消息、进行批量与节流。”</p>
+<p>“对于关键通知，则应该将可靠性建立在持久化事件、客户端确认和补拉机制上。”</p>
+<p>“WebSocket 连接建立成功，不等于每条消息都已经可靠送达用户。”</p>
+<h2 id="mysqlkafkaflinkclickhouse">第八幕：实时数据长河——MySQL、Kafka、Flink、ClickHouse 会师</h2>
+<p>半年后。</p>
+<p>交易系统开始每天产生数千万条订单和更多用户行为事件。</p>
+<p>国王问：</p>
+<p>“我们怎样让运营大屏实时展示成交金额？”</p>
+<p>架构师带领林澈来到数据大陆的东部。</p>
+<p>那里，一条巨大的数据河流正穿过四座城市。</p>
+<p><img alt="故事场景插图" src="https://images.openai.com/static-rsc-4/ViSI7WLcNNh_EOGtWPPVshrmouCFZcoVSkd0YYs5Bk7aAMmRoJoiyF3lApm2c4sJ5IbH0whWunznhn-ln5qXeEHa80e4cpbJQ1InlCJswLydE2fYRg0P0BcLM_uvR0DWcK0xSlPVEOS8z6stwwKMTQLI0HhMEKy-gs6No3cts_Y?purpose=inline" /></p>
+<p><em>图片来源：Data-to-Production: Bridging the Gap Between Iceberg and Live Microservices</em></p>
+<p><a href="https://www.wix.engineering/post/data-to-production-bridging-the-gap-between-iceberg-and-live-microservices?utm_source=chatgpt.com">wix.engineering</a></p>
+<h3 id="mysql">一、不要让实时看板直接重复扫描 MySQL</h3>
+<p>“陛下，我们不能为了更新大屏，每秒重新统计亿级订单表。”</p>
+<p>“应该让新增的可信业务事件进入实时数据管道。”</p>
+<h2 id="_20">实时订单分析链路</h2>
+<figure class="concept"><figcaption>权威事实 → 可靠事件 → 派生统计</figcaption><ol class="concept-flow"><li><strong>MySQL / Outbox</strong><span>持久化订单与支付事实</span></li><li><strong>CDC / 事件发布 → Kafka</strong><span>捕获并传递语义明确的业务事件</span></li><li><strong>Flink</strong><span>去重、事件时间、窗口和聚合</span></li><li><strong>ClickHouse / Redis</strong><span>分析明细与结果 / 热点实时指标</span></li><li><strong>SSE / WebSocket</strong><span>推送大屏变化</span></li></ol></figure>
+
+<h3 id="flink-watermark">二、Flink 为什么需要 Watermark？</h3>
+<p>林澈问：</p>
+<p>“如果支付事件本身有时间戳，直接按照时间统计不就行了？”</p>
+<p>Flink 统帅回答：</p>
+<p>“因为事件可能乱序到达。”</p>
+<p>“20:04:58 发生的支付事件，可能在 20:05:10 才到达。”</p>
+<p>“Watermark 可以帮助事件时间窗口决定何时触发计算。”</p>
+<p>“但它不能保证迟到事件永远不会出现。”</p>
+<p>“因此，还需要明确迟到事件如何修正统计结果。”</p>
+<h3 id="_21">三、为什么实时与离线必须对账？</h3>
+<p>架构师指向另一座城市。</p>
+<p>“Spark 还会定期根据可信支付明细进行历史重算。”</p>
+<p>“我们可以利用它核对 Flink 的实时结果。”</p>
+<p>“因为实时计算没有抛出异常，并不意味着业务指标一定正确。”</p>
+<p>“支付事件可能重复。”</p>
+<p>“退款口径可能不同。”</p>
+<p>“时间窗口可能错位。”</p>
+<p>“订单级金额也可能在 Join 时被重复累计。”</p>
+<p>“一个成熟的数据平台，必须能解释每一分钱来自哪一笔可信业务事实。”</p>
+<h2 id="kubernetes">第九幕：Kubernetes 调度中心——让工程真正部署起来</h2>
+<p>国王宣布：</p>
+<p>“代码已经写完。”</p>
+<p>“现在全部部署到 Kubernetes！”</p>
+<p>架构师再次阻止。</p>
+<p>“陛下，在进入 Kubernetes 之前，我们应该先保证本地开发与测试环境能够稳定运行。”</p>
+<h3 id="docker-compose">一、Docker Compose：本地集成环境</h3>
+<p>林澈准备了一份基础 Compose 配置。</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">mysql</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mysql:8.4</span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">MYSQL_ROOT_PASSWORD</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${MYSQL_ROOT_PASSWORD}</span>
+<span class="w">      </span><span class="nt">MYSQL_DATABASE</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">empire</span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;127.0.0.1:3306:3306&quot;</span>
+<span class="w">    </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mysql-data:/var/lib/mysql</span>
+
+<span class="w">  </span><span class="nt">redis</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">redis:7.4</span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;127.0.0.1:6379:6379&quot;</span>
+
+<span class="w">  </span><span class="nt">order-service</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">build</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./order-service</span>
+<span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mysql</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">redis</span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">SPRING_DATASOURCE_URL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">jdbc:mysql://mysql:3306/empire</span>
+<span class="w">      </span><span class="nt">SPRING_DATA_REDIS_HOST</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">redis</span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;127.0.0.1:8080:8080&quot;</span>
+
+<span class="nt">volumes</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">mysql-data</span><span class="p">:</span>
+</code></pre></div>
+
+<p>架构师说道：</p>
+<p>“这只是简化的本地开发骨架，不是完整可运行的生产配置。”</p>
+<p>“它还需要应用数据库账户、初始化迁移、健康检查、凭据管理，以及服务就绪控制。”</p>
+<p>“<code>depends_on</code> 的基本启动顺序，也不能代替数据库真正就绪的检查。”</p>
+<p>“另外，不能把开发环境的数据库密码直接硬编码进生产仓库。”</p>
+<h3 id="kubernetes-yaml">二、Kubernetes 部署不是复制一个 YAML 就结束</h3>
+<p>架构师展示：</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apps/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deployment</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">order-service</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">replicas</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">  </span><span class="nt">selector</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">matchLabels</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">app</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">order-service</span>
+<span class="w">  </span><span class="nt">template</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">metadata</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">labels</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">app</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">order-service</span>
+<span class="w">    </span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">containers</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app</span>
+<span class="w">          </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry.example.com/order-service:1.0.0</span>
+<span class="w">          </span><span class="nt">ports</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">containerPort</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">          </span><span class="nt">resources</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">requests</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">cpu</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;500m&quot;</span>
+<span class="w">              </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;512Mi&quot;</span>
+<span class="w">            </span><span class="nt">limits</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1Gi&quot;</span>
+<span class="w">          </span><span class="nt">readinessProbe</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">httpGet</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/actuator/health/readiness</span>
+<span class="w">              </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">            </span><span class="nt">initialDelaySeconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">            </span><span class="nt">periodSeconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
+</code></pre></div>
+
+<p>“这里的镜像地址仅是示例。”</p>
+<p>“应用还需要正确配置 Spring Boot Actuator、数据库凭据与相关探针端点。”</p>
+<p>“而且，Readiness Probe 不应设计成每次都执行昂贵的数据库全链路查询，否则健康检查本身可能成为压力来源。”</p>
+<h3 id="rolling-update">三、Rolling Update 与优雅停机</h3>
+<p>国王问：</p>
+<p>“新版本发布时，旧 Pod 直接杀掉不就行了？”</p>
+<p>架构师摇头。</p>
+<p>“如果旧 Pod 正在处理订单事务，突然终止可能导致请求结果不明确。”</p>
+<p>“如果它持有 WebSocket 连接，还会导致大量客户端断线。”</p>
+<p>“因此，需要合理设计停止接流量、处理在途请求、释放资源和客户端重连。”</p>
+<p>“业务层还需要有幂等和状态查询能力，解决用户在服务切换期间遇到的结果不确定问题。”</p>
+<h2 id="_22">第十幕：可观测性法庭——怎样知道系统到底出了什么问题？</h2>
+<p>系统终于完成集成。</p>
+<p>架构师没有立刻宣布上线。</p>
+<p>而是提出一个问题。</p>
+<p>“林澈，假设用户说订单创建很慢，你怎样排查？”</p>
+<p>林澈回答：</p>
+<p>“看日志。”</p>
+<p>“如果日志没有明显报错呢？”</p>
+<p>“看 CPU。”</p>
+<p>“如果 CPU 只有 30% 呢？”</p>
+<p>林澈沉默。</p>
+<p>架构师走到黑板前，写下三个词。</p>
+<p>Metrics、Logs、Traces。</p>
+<h3 id="metrics">一、Metrics：知道哪里异常</h3>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>http.server.requests
+hikaricp.connections.active
+hikaricp.connections.pending
+jvm.memory.used
+</code></pre></div>
+
+<p>“通过 Micrometer、Prometheus 等工具，可以收集和观测相关指标。”</p>
+<p>“监控时不仅要看平均值，还要看 P95、P99 和错误率。”</p>
+<h3 id="logs">二、Logs：知道发生了什么</h3>
+<p>日志应该能够关联到具体请求。</p>
+<div class="codehilite"><pre><span></span><code>traceId=abc123
+orderId=9527
+stage=DB_COMMIT
+durationMs=320
+result=SUCCESS
+</code></pre></div>
+
+<p>“但不能把银行卡信息、密码、凭据或其他敏感数据随意写入日志。”</p>
+<h3 id="tracing">三、Tracing：知道时间花在哪里</h3>
+<p>假设某次订单请求：</p>
+<div class="codehilite"><pre><span></span><code>Gateway                 15ms
+    ↓
+OrderService            20ms
+    ↓
+等待数据库连接          280ms
+    ↓
+MySQL SQL                30ms
+    ↓
+响应                    10ms
+</code></pre></div>
+
+<p>国王看着时间线。</p>
+<p>“原来 SQL 只花了 30 毫秒。”</p>
+<p>“真正慢的是等待数据库连接。”</p>
+<p>“正是。”</p>
+<p>“如果我们只看 SQL 执行时间，可能误以为数据库完全没有问题。”</p>
+<h3 id="_23">四、告警不能只看机器是否存活</h3>
+<p>架构师要求监控四类指标。</p>
+<p>流量：QPS、事件输入速率。</p>
+<p>延迟：P95、P99、队列等待时间。</p>
+<p>错误：HTTP 错误率、业务失败率、消息重试。</p>
+<p>饱和度：连接池、队列、线程池、CPU、磁盘与下游吞吐。</p>
+<p>“对于实时链路，还需要看 Kafka Lag、Flink Watermark 进度、Checkpoint 和 Sink 写入状态。”</p>
+<p>“监控必须反映用户体验，而不是仅证明所有进程都还活着。”</p>
+<h2 id="qps">第十一幕：最后一次压测——十万 QPS 的真相</h2>
+<p>半年后。</p>
+<p>帝国工程委员会重新召集所有人。</p>
+<p>考官问：</p>
+<p>“你们现在是否已经能够达到十万 QPS？”</p>
+<p>林澈没有立即回答。</p>
+<p>他打开了一份测试报告。</p>
+<p>“考官，我们把流量拆成了三种。”</p>
+<p>第一种：活动入口请求。</p>
+<p>第二种：Redis 资格校验与库存预占。</p>
+<p>第三种：订单持久化与异步履约。</p>
+<p>“这三种吞吐量不能混为一谈。”</p>
+<h3 id="_24">一、测试目标</h3>
+<p>假设某场优惠券活动：</p>
+<p>总库存一万张。</p>
+<p>峰值活动入口 100,000 QPS。</p>
+<p>其中大部分用户没有资格、重复请求或已经遇到售罄状态。</p>
+<p>最终能够获得预占资格的请求数量受到库存和业务规则限制。</p>
+<p>“所以，十万入口 QPS，并不意味着数据库必须每秒创建十万笔成功订单。”</p>
+<p>“但仍然需要应对大量入口判断、连接与限流请求。”</p>
+<h3 id="_25">二、分层压测</h3>
+<h2 id="_26">终极压测 · 虚构验收记录</h2>
+<table>
+<thead>
+<tr>
+<th>测试项目</th>
+<th>示例结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>入口 API 峰值</td>
+<td>100,000 QPS</td>
+</tr>
+<tr>
+<td>入口校验 P99</td>
+<td>85ms</td>
+</tr>
+<tr>
+<td>库存超卖</td>
+<td>未发现</td>
+</tr>
+<tr>
+<td>重复领取</td>
+<td>唯一约束验证通过</td>
+</tr>
+<tr>
+<td>履约消费吞吐</td>
+<td>2,000/s</td>
+</tr>
+<tr>
+<td>消息恢复测试</td>
+<td>按用例通过</td>
+</tr>
+</tbody>
+</table>
+<p>全部数字为小说中的假设，不代表已经实际部署或测得相应性能。真实验收还需包含环境配置、统计窗口、请求分布、错误预算和故障覆盖范围。</p>
+<p>国王问：</p>
+<p>“为什么履约只有每秒两千？”</p>
+<p>架构师回答：</p>
+<p>“因为数据库最终持久化能力有其自身上限。”</p>
+<p>“异步队列能够将入口峰值与下游处理速率解耦，但不能创造数据库容量。”</p>
+<p>“如果活动的业务 SLA 要求一分钟内完成所有一万笔成功领取，消费者的可持续吞吐必须足以满足这个目标，并留有故障余量。”</p>
+<p>“所以我们不仅检查 QPS，还检查从预占到最终结果的端到端延迟分布。”</p>
+<h3 id="_27">三、如何证明没有超卖？</h3>
+<p>考官追问：</p>
+<p>“你们说没有超卖，是因为监控显示零异常吗？”</p>
+<p>林澈回答：</p>
+<p>“不是。”</p>
+<p>“我们会在并发测试和恢复测试后，核对权威库存与领取记录的不变量。”</p>
+<p>例如：</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>已成功领取数</mtext><mo>≤</mo><mtext>活动总配额</mtext></mrow><annotation encoding="application/x-tex"> \text{已成功领取数}\leq\text{活动总配额} </annotation></semantics></math></span></p>
+<p>同时检查：</p>
+<p>相同用户是否重复领取。</p>
+<p>相同 requestId 是否重复产生业务结果。</p>
+<p>预占成功但未履约的任务是否能够恢复或补偿。</p>
+<p>补偿是否可能重复返还库存。</p>
+<p>“还要验证服务在预占后崩溃、消息投递失败、消费成功但 ACK 丢失、数据库提交结果未知等故障窗口。”</p>
+<p>考官终于点头。</p>
+<p>“这才像真实的工程验收。”</p>
+<h2 id="_28">第十二幕：最终考核——面试官不再满足于背诵八股</h2>
+<p>架构师将十道问题放在林澈面前。</p>
+<div class="quiz" data-quiz="12"></div>
+
+<h2 id="_29">尾声：一张架构图，无法证明一座帝国</h2>
+<p>半年后。</p>
+<p>天穹直播平台终于通过了工程委员会的阶段验收。</p>
+<p>王国已经不再只有一台 Spring Boot 服务器。</p>
+<p>现在，它拥有入口网关、业务服务集群、缓存层、数据库事务、可靠消息系统、WebSocket 长连接服务，以及从 Kafka 到 Flink、ClickHouse 的实时分析链路。</p>
+<p>但林澈知道，真正重要的变化并不在于组件数量。</p>
+<p>而在于他终于能够回答那些以前无法回答的问题。</p>
+<p>为什么库存不会超卖？</p>
+<p>为什么重复消息不会重复发放积分？</p>
+<p>为什么异步履约失败后仍然能够恢复？</p>
+<p>为什么百万连接不需要百万个线程？</p>
+<p>为什么增加消费者不一定能够消除消息积压？</p>
+<p>为什么服务器 CPU 很低，接口却可能很慢？</p>
+<p>为什么 Flink Checkpoint 成功，财务报表却仍然可能错误？</p>
+<p>为什么十万入口 QPS 不等于十万订单事务 TPS？</p>
+<p>又为什么一次成功的压测，不能证明系统永远不会发生故障？</p>
+<p>国王 Java 看着年轻工程师。</p>
+<p>“你现在认为，什么才是真正的高并发工程能力？”</p>
+<p>林澈沉思了很久。</p>
+<p>随后，他回答：</p>
+<p>“不是知道多少中间件。”</p>
+<p>“而是能在业务约束下设计系统，知道瓶颈在哪里，知道数据可能在哪一步出错，能够用代码保护正确性，用压测证明容量，用故障演练证明恢复能力。”</p>
+<p>首席架构师终于露出笑容。</p>
+<p>“很好。”</p>
+<p>“但你现在只完成了工程的第一阶段。”</p>
+<p>国王有些惊讶。</p>
+<p>“还有下一阶段？”</p>
+<p>架构师拿出一份新的报告。</p>
+<p>这一次，报告中没有任何代码错误。</p>
+<p>也没有任何数据库异常。</p>
+<p>却有一项指标开始持续恶化。</p>
+<p>线上系统的性能，正在随着每一次版本发布而逐渐下降。</p>
+<p>“陛下，我们的工程现在能够运行。”</p>
+<p>“接下来，要解决的是如何让它长期保持可靠。”</p>
+<p>“一个人写出的高性能代码，如何在数百名工程师不断修改之后仍然保持正确？”</p>
+<p>“我们需要建立容量回归测试、性能基线、灰度发布、自动回滚、混沌工程和工程质量门禁。”</p>
+<p>“否则，再优秀的系统，也可能在不断迭代中慢慢崩溃。”</p>
+<h2 id="_30">待续 · 第十三章预告：永不崩溃的防线——性能回归、灰度发布与混沌工程</h2>
+<blockquote>
+<p>第十三章尚未发布，以下为原稿预告。</p>
+</blockquote>
+<p>第十三章将继续采用完整小说叙事，深入企业级生产系统的长期演化：</p>
+<ol>
+<li>性能回归测试：为什么新版本没有功能 Bug，P99 却上涨了三倍。</li>
+<li>容量基线与 CI/CD：如何在代码合并前发现性能退化。</li>
+<li>压测环境与测试数据：如何避免虚假的十万 QPS 成绩。</li>
+<li>蓝绿发布与金丝雀发布：如何只让一小部分真实流量先进入新版本。</li>
+<li>自动回滚：哪些指标应该触发停止发布。</li>
+<li>数据库 Schema 演化：如何避免新旧版本同时运行时出现不兼容。</li>
+<li>混沌工程：模拟实例宕机、消息积压、网络延迟与数据库主从切换。</li>
+<li>故障预算与 SLO：如何决定是继续上线新功能，还是优先修复稳定性。</li>
+<li>Java 工程化实践：Spring Boot、JUnit、Testcontainers、k6、Prometheus、OpenTelemetry 与发布流水线。</li>
+<li>高级面试实战：怎样证明自己不仅会搭系统，还真正理解生产环境的稳定性工程。</li>
+</ol>
+<p>《数据帝国》第十二章·完</p></article><section class="practice"><h2>把原理放进实验</h2><p>调整参数，观察系统如何变化。所有实验均在当前浏览器中运行。</p><a href="practice.html">查看全部交互实验 →</a> · <a href="editorial.html">内容整理与技术校正 →</a></section><nav class="chapter-nav" aria-label="上下章"><a href="chapter-11.html">← 上一章<span>资源之战——高并发与大数据的成本极限</span></a><a href="index.html#coming">待续 →<span>第 13 章尚未发布 · 返回目录</span></a></nav></main></div><footer><a href="index.html">数据帝国</a><p>在故事中理解系统，在实验中观察原理。<span>现有 12 章 · 第 13 章待续</span></p><a href="https://github.com/wupzl/data-empire-reader">项目源码 ↗</a></footer>
+<dialog id="search-dialog" aria-labelledby="search-title"><div class="search-top"><h2 id="search-title">在帝国里寻找答案</h2><button id="search-close" aria-label="关闭搜索">关闭 ×</button></div><label for="query">关键词或代码，例如 Redis、背压、Checkpoint</label><input id="query" type="search" autocomplete="off" placeholder="搜索全书正文…"><p id="search-status" role="status">输入关键词，搜索 12 章内容</p><div id="search-results"></div></dialog></body></html>

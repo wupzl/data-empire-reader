@@ -1,5 +1,12 @@
 const assert = require('node:assert/strict');
 const m = require('../assets/labs.js');
+assert.equal(m.reconcile(false,false),400);
+assert.equal(m.reconcile(true,false),300);
+assert.equal(m.reconcile(true,true),270);
+assert.deepEqual(m.granules(0),{scan:0,skip:32,ratio:0});
+assert.deepEqual(m.granules(32),{scan:32,skip:0,ratio:100});
+assert.deepEqual(m.unitcost(1000000,50000000000,20),{current:20,optimized:16});
+assert.equal(m.unitcost(0,1,100).optimized,0);
 assert.equal(m.little(1000,200),200);
 assert.equal(m.little(0,200),0);
 assert.equal(m.queue(2000,1000,10),10000);

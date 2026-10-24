@@ -2,6 +2,9 @@
 (() => {
   'use strict';
   const models = {
+    reconcile: (deduplicate, net) => (deduplicate ? 300 : 400) - (net ? 30 : 0),
+    unitcost: (monthlyYuan, requests, saving) => ({current: monthlyYuan / requests * 1000000, optimized: monthlyYuan * (1 - saving / 100) / requests * 1000000}),
+    granules: count => ({scan: count, skip: 32 - count, ratio: count / 32 * 100}),
     little: (qps, ms) => qps * ms / 1000,
     queue: (incoming, capacity, seconds, initial = 0) => Math.max(0, initial + (incoming - capacity) * seconds),
     drain: (incoming, capacity, initial) => initial === 0 ? 0 : capacity > incoming ? initial / (capacity - incoming) : Infinity,
@@ -86,17 +89,18 @@
         chart(times.map(s => models.queue(a, b, s, q)), times.map(s => `${fmt(s)}s`), ' 条');
       };
       note.textContent = '恒定速率、无限队列的理想模型，积压最低为零；不计重试、确认、网络或过期。';
-    } else if (kind === 'atomic') {
+    } else if (kind === 'atomic' || kind === 'stocksql') {
+      const sql = kind === 'stocksql';
       const label = document.createElement('label'); label.append(text('span', '库存扣减方式'));
       const mode = document.createElement('select'); mode.setAttribute('aria-label', '库存扣减方式');
-      for (const [value, title] of [['unsafe','GET + DECR（非原子组合）'],['lua','Lua 原子检查并扣减']]) { const o = text('option', title); o.value = value; mode.append(o); }
+      for (const [value, title] of [['unsafe',sql ? '先 SELECT，再无条件 UPDATE' : 'GET + DECR（非原子组合）'],['lua',sql ? '条件 UPDATE：available > 0' : 'Lua 原子检查并扣减']]) { const o = text('option', title); o.value = value; mode.append(o); }
       label.append(mode); fields.append(label); let step = 0;
       const unsafe = [['库存 1；两位用户等待领取。',''],['张三 GET → 1；通过检查。','库存仍为 1'],['李四 GET → 1；也通过检查。','库存仍为 1'],['张三 DECR → 0；领取成功。',''],['李四 DECR → −1；也领取成功。','发生超卖：两个请求的检查和扣减交错执行。']];
       const atomic = [['库存 1；两位用户等待领取。',''],['张三脚本：检查 1，再扣减至 0，领取成功。','同一个脚本执行期间，李四的命令不能穿插。'],['李四脚本：库存为 0，拒绝领取。','库存保持 0，无超卖。']];
       const next = button('下一步', safe(() => { step++; update(); }));
-      update = () => { const sequence = mode.value === 'lua' ? atomic : unsafe; step = Math.min(step, sequence.length - 1); show(`步骤 ${step + 1} / ${sequence.length}：${sequence[step][0]}`, sequence[step][1]); next.disabled = step === sequence.length - 1; };
+      update = () => { const sequence = mode.value === 'lua' ? atomic : unsafe; step = Math.min(step, sequence.length - 1); let headline = sequence[step][0], detail = sequence[step][1]; if (sql) {const convert = s => s.replaceAll('张三','线程 A').replaceAll('李四','线程 B').replaceAll('GET','SELECT').replaceAll('DECR','无条件 UPDATE').replaceAll('脚本','条件 UPDATE').replaceAll('同一个条件 UPDATE 执行期间，线程 B的命令不能穿插。','条件检查与更新由单条 SQL 完成，竞争由数据库协调。'); headline=convert(headline); detail=convert(detail);} show(`步骤 ${step + 1} / ${sequence.length}：${headline}`, detail); next.disabled = step === sequence.length - 1; };
       mode.addEventListener('change', () => { step = 0; update(); }); reset = () => {step = 0; mode.value = 'unsafe';};
-      note.textContent = '演示预先设定的交错顺序；Lua 原子性不等于错误回滚，也不涵盖 Redis 之外的消息或数据库操作。';
+      note.textContent = sql ? '教学交错顺序，不执行 SQL。无条件更新可能导致负库存；若 CHECK 约束生效，数据库会拒绝违规更新。条件 UPDATE 还需配合同一事务创建订单，并检查受影响行数。' : '演示预先设定的交错顺序；Lua 原子性不等于错误回滚，也不涵盖 Redis 之外的消息或数据库操作。';
     } else if (kind === 'bucket') {
       const capacity = input('桶容量（1–1,000）', 5, 1, 1000);
       const refill = input('每次补充令牌数（1–1,000）', 1, 1, 1000);
@@ -140,6 +144,25 @@
       const utilization = input('规划负载比例（1–100%）', 70, 1, 100);
       update = () => show(`${fmt(models.capacity(numeric(qps), numeric(throughput), numeric(utilization)))} 台 API 实例`, `ceil(${fmt(numeric(qps))} ÷ (${fmt(numeric(throughput))} × ${numeric(utilization)}%))`);
       note.textContent = '假设同质实例且负载均匀，无其他共享瓶颈；尚未计入可用区故障、扩容延迟及连接资源。';
+    } else if (kind === 'reconcile') {
+      const checkbox = (label) => {const wrap=document.createElement('label');const field=document.createElement('input');field.type='checkbox';wrap.append(field,text('span',label));fields.append(wrap);return field;};
+      const dedup=checkbox('按事件 ID 去重'),net=checkbox('扣除退款，计算净额');
+      update=()=>{show(`当前统计结果 ¥${models.reconcile(dedup.checked,net.checked)}`,`${dedup.checked?'支付事件已去重':'重复 P001 也被累加'} · ${net.checked?'统计支付减退款后的净额':'统计支付金额，不扣退款'}`);const list=document.createElement('ul');['P001 支付 +¥100','P002 支付 +¥200','P001 重复支付 +¥100','R001 退款 −¥30'].forEach(e=>list.append(text('li',e)));output.append(list);};
+      reset=()=>{dedup.checked=net.checked=false;};note.textContent='固定事件样本：去重后的支付总额 ¥300、净额 ¥270。生产系统需要定义退款关联键、部分退款、状态版本与时间边界。';
+    } else if (kind === 'granules') {
+      const count=input('需要扫描的 Granule（0–32）',3,0,32);
+      update=()=>{const value=models.granules(numeric(count));show(`扫描 ${value.scan} / 32 · 跳过 ${value.skip}`,`扫描占比 ${fmt(value.ratio)}%。这里由你指定扫描数量，没有预测数据库实际裁剪效果。`);const grid=document.createElement('div');grid.className='shard-grid granule-grid';for(let i=0;i<32;i++){const cell=text('span',String(i+1));cell.className=i<value.scan?'active':'';cell.setAttribute('aria-label',`Granule ${i+1}：${i<value.scan?'扫描':'跳过'}`);grid.append(cell);}output.append(grid);};
+      note.textContent='着色区为扫描，其余为跳过。32 个 Granule 为教学假设，实际裁剪取决于数据分布、Part、谓词、索引与配置。';
+    } else if (kind === 'querycost') {
+      const label=document.createElement('label');label.append(text('span','选择教学场景'));const select=document.createElement('select');label.append(select);fields.append(label);
+      const scenarios=[['排序键范围查询',7,20,'过滤与物理排序匹配时，有机会减少扫描范围。'],['复杂多表 Join',100,90,'Join 可能增加数据交换、哈希表或排序开销。'],['精确 UV 统计',100,80,'精确去重状态可能随不同用户数量增大。'],['物化预聚合结果',2,10,'将部分计算前移到写入阶段，以空间与维护开销换查询效率。']];
+      scenarios.forEach(([title],i)=>{const option=text('option',title);option.value=i;select.append(option);});
+      update=()=>{const [title,scan,compute,detail]=scenarios[Number(select.value)];show(title,detail);chart([scan,compute],['扫描工作量','计算资源'],' / 100');};
+      select.addEventListener('change',safe(update));reset=()=>{select.value='0';};note.textContent='所有数值均为人工指定的相对教学示意，不能作为 ClickHouse、StarRocks 的性能基准、比例预测或选型依据。';
+    } else if (kind === 'unitcost') {
+      const cost=input('月度成本（万元，0–100,000）',100,0,100000,.01), volume=input('月度请求量（亿次，0.01–100,000）',500,.01,100000,.01),saving=input('预计节省比例（0–100%）',20,0,100);
+      update=()=>{const value=models.unitcost(numeric(cost)*10000,numeric(volume)*100000000,numeric(saving));show(`当前每百万请求 ¥${value.current.toFixed(2)}`,`优化后每百万请求 ¥${value.optimized.toFixed(2)}`);};
+      note.textContent='假设请求量不变、成本按指定比例下降。请求量不得为零；还应核对流量结构、业务收益与 SLO 是否变化。';
     } else {show('该实验暂不可用'); return;}
     const run = safe(update);
     fields.addEventListener('input', run);

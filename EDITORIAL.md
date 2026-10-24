@@ -1,10 +1,10 @@
 # 内容整理与技术校正
 
-本项目是一部持续连载的小说式技术读物。现有八章正文；第九章《数据仓库之城——从混乱日志到可信指标》仅有原稿预告，尚未发布。
+本项目是一部持续连载的小说式技术读物。现有十二章正文；第十三章《永不崩溃的防线——性能回归、灰度发布与混沌工程》仅有原稿预告，尚未发布。
 
 ## 原稿与维护入口
 
-`source/data-empire-original.md` 完整保存用户提供的原稿，不覆盖、不补写结局。`chapters/01.md` 至 `08.md` 为整理后的维护版本。日常修改章节后运行 `python build.py`；不必重新导入原稿。
+`source/data-empire-original.md` 完整保存用户提供的原稿，不覆盖、不补写结局。`chapters/01.md` 至 `12.md` 为整理后的维护版本。日常修改章节后运行 `python build.py`；不必重新导入原稿。
 
 保留故事、代码、技术论证、现有章末预告与图片来源。清除独立的“下一章。”对话残留、复制的站点 favicon 徽标；修复标题层级、公式转义和复制出的交互控件文本。技术架构示意保留为本地正文代码块，不依赖远程图片服务。外部场景插图保留原链接、来源和失败提示。
 
@@ -25,7 +25,7 @@
 
 ## 面试题卡补充
 
-原稿复制结果只留下每组当前可见的一道题，其他题卡与多数答案缺失。本次保留七组原问题，并依据各章主题补充为 62 道可翻页、可展开答案的题卡；题卡中标注补充来源，不将补充内容冒充原稿。
+原稿复制结果只留下每组当前可见的一道题，其他题卡与多数答案缺失。保留十一组原问题，并依据各章主题补充为 102 道可翻页、可展开答案的题卡；题卡中标注补充来源，不将补充内容冒充原稿。
 
 ## 官方参考
 
@@ -49,3 +49,16 @@
 ## 第四至第八章结构化修订
 
 第四章将文件分块与副本放置分成两个层次，补充 Hadoop 分工、HDFS 读取步骤、Shuffle 流程和 YARN 层次；第五章整理 SQL 计划演化与 Broadcast Join。第六至八章同步重排窗口对比、实时链路、背压方向、执行资源、广播路径和面试节奏，监控与容量指标改为有明确表头的表格，清除复制残留的图表刻度和 favicon 徽标。图解使用本地 HTML/CSS，移动端按步骤阅读。保留小说叙事和完整原稿。
+
+## 第九至第十二章续写整理（2026-10-24）
+
+续写原稿完整保存为 `source/data-empire-continuation-original.md`，SHA-256 记录在 `book.json`；原有八章原稿继续保留。第八章入口改为第九章已发布，首页展示十二章及第十三章待续，延续现有纯白、米白、深色主题。
+
+- 第九章：修复被压成一行的 PySpark 汇总代码，并给出已初始化 SparkSession 与业务时区前提；重排数仓分层、维度关系、湖仓层次与实时/历史双路径。补齐重复支付、去重与退款口径交互，明确 ¥400、¥300、¥270 的区别。
+- 第十章：补齐行列布局与 MergeTree 合并图解；明确普通 MergeTree 不强制主键唯一，增量物化视图需要另外处理历史回补、修改与撤销。Granule 扫描数量由读者指定；查询资源场景为人工赋值示意，不是数据库性能预测或产品基准。
+- 第十一章：成本、分层存储与负载表现改为表格；原稿残留曲线坐标无法还原分类金额，不据此编造数据。补齐单位成本计算，拒绝零请求量。保留正确的线程池先入队再扩至最大线程数的调度说明。
+- 第十二章：并发库存改为可逐步操作的 SQL 模型；同时说明 CHECK 约束可能拒绝负库存，不声称所有数据库都会产生同一结果。核心事务与异步任务分开展示，保留幂等、Outbox 与可恢复预占的边界。
+
+本次新增五个交互实验，并按四章各十题补齐缺失的面试题卡及参考回答。补充题卡注明来源范围。第十二章是工程蓝图，仓库不包含可直接运行的完整 Spring Boot 服务，也没有声称执行过分布式压测；Compose、Deployment、k6 均为上下文中的配置或脚本示例。
+
+技术语义参考：[MergeTree](https://clickhouse.com/docs/reference/engines/table-engines/mergetree-family/mergetree)、[增量物化视图](https://clickhouse.com/docs/concepts/features/materialized-views/incremental-materialized-view)、[Java 21 ThreadPoolExecutor](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html)、[Kubernetes HPA](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/)。

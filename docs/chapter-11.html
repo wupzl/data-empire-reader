@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="description" content="数据帝国：以 Java 后端工程师的视角，在小说和交互实验中理解高并发与大数据。现有 12 章，第 13 章待续。"><title>资源之战——高并发与大数据的成本极限 · 数据帝国</title><script>try{document.documentElement.dataset.theme=localStorage.getItem('de-theme')||'light';document.documentElement.style.setProperty('--reader-size',Math.max(14,Math.min(26,Number(localStorage.getItem('de-size'))||18))+'px')}catch(e){}</script><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="shelf-nav.css"><link rel="stylesheet" href="labs.css"><script src="app.js" defer></script><script src="labs.js" defer></script><script src="quizzes.js" defer></script><script src="white-theme.js" defer></script></head>
+<body data-chapter="11" data-count="12"><a class="skip" href="#main">跳到正文</a><div id="progress" aria-hidden="true"></div><header class="topbar"><a class="brand" href="index.html"><span class="emblem" aria-hidden="true">D<span>↗</span></span><span>数据帝国<small>THE DATA EMPIRE</small></span></a><nav class="shelf-nav" aria-label="学习项目导航"><a class="shelf-home" href="/">← 学习书架</a><details class="shelf-switch"><summary>切换项目 ▾</summary><div class="shelf-menu"><a href="/pytorch-apprentice/">PyTorch：炼金术士的学徒</a><a href="/ai-era-reader/">AI 纪元</a><a href="/data-empire-reader/" aria-current="true">数据帝国</a><a href="/rag-empire-reader/">RAG 帝国</a></div></details></nav><div class="controls"><button id="search-open" aria-label="搜索全书">搜索 <kbd>/</kbd></button><button id="smaller" aria-label="缩小字号">A−</button><button id="larger" aria-label="增大字号">A＋</button><button id="theme" aria-label="切换深浅色主题">◐</button></div></header>
+<div class="reader-layout"><aside class="sidebar"><p class="eyebrow">THE EMPIRE’S JOURNEY</p><nav aria-label="全书章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a><a class="" href="chapter-09.html"><span>09</span>数据仓库之城——从混乱日志到可信指标</a><a class="" href="chapter-10.html"><span>10</span>OLAP 王座——ClickHouse、StarRocks 与百亿级分析战争</a><a class="current" href="chapter-11.html" aria-current="page"><span>11</span>资源之战——高并发与大数据的成本极限</a><a class="" href="chapter-12.html"><span>12</span>终极工程——从一台 Spring Boot 到十万 QPS 的生产战场</a></nav><details class="local-toc" open><summary>本章线索</summary><div class="toc">
+<ul>
+<li><a href="#_1">第一幕：一份价值三千万的账单</a></li>
+<li><a href="#_2">第二幕：第一条资源法则——性能不是免费的</a></li>
+<li><a href="#_5">第三幕：线程池——为什么更多士兵反而让王国更慢？</a></li>
+<li><a href="#_9">第四幕：连接池之门——一千个线程争夺一百张通行证</a></li>
+<li><a href="#cpu-30-api">第五幕：CPU 只有 30%，为什么 API 还是很慢？</a></li>
+<li><a href="#_15">第六幕：实时军团与离线军团的资源争夺</a></li>
+<li><a href="#kubernetes">第七幕：Kubernetes 弹性军团——让服务器随流量增减</a></li>
+<li><a href="#pb">第八幕：PB 级存储——为什么有些数据应该离开昂贵的城堡？</a></li>
+<li><a href="#finops">第九幕：FinOps——每百万请求到底花多少钱？</a></li>
+<li><a href="#_29">单位请求成本模拟</a></li>
+<li><a href="#_30">第十幕：压测法庭——如何发现系统的真正极限？</a></li>
+<li><a href="#java">第十一幕：Java 工程实战——建立一套可控的高并发服务</a></li>
+<li><a href="#_41">第十二幕：三千万账单的最终审判</a></li>
+<li><a href="#_42">帝国成本改革结果 · 虚构数据</a></li>
+<li><a href="#_43">第十三幕：高级架构师的十道资源试炼</a></li>
+<li><a href="#_44">尾声：真正的高手，不是拥有最多服务器的人</a></li>
+<li><a href="#_45">下一章：《终极工程——亲手构建高并发与大数据平台》</a></li>
+</ul>
+</div>
+</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 11 <span>/ 12 · 约 32 分钟</span></p><h1>资源之战——高并发与大数据的成本极限</h1><p class="topics">线程池 · 连接池 · 弹性伸缩 · 冷热分层 · FinOps</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a><a class="" href="chapter-09.html"><span>09</span>数据仓库之城——从混乱日志到可信指标</a><a class="" href="chapter-10.html"><span>10</span>OLAP 王座——ClickHouse、StarRocks 与百亿级分析战争</a><a class="current" href="chapter-11.html" aria-current="page"><span>11</span>资源之战——高并发与大数据的成本极限</a><a class="" href="chapter-12.html"><span>12</span>终极工程——从一台 Spring Boot 到十万 QPS 的生产战场</a></nav><div class="toc">
+<ul>
+<li><a href="#_1">第一幕：一份价值三千万的账单</a></li>
+<li><a href="#_2">第二幕：第一条资源法则——性能不是免费的</a></li>
+<li><a href="#_5">第三幕：线程池——为什么更多士兵反而让王国更慢？</a></li>
+<li><a href="#_9">第四幕：连接池之门——一千个线程争夺一百张通行证</a></li>
+<li><a href="#cpu-30-api">第五幕：CPU 只有 30%，为什么 API 还是很慢？</a></li>
+<li><a href="#_15">第六幕：实时军团与离线军团的资源争夺</a></li>
+<li><a href="#kubernetes">第七幕：Kubernetes 弹性军团——让服务器随流量增减</a></li>
+<li><a href="#pb">第八幕：PB 级存储——为什么有些数据应该离开昂贵的城堡？</a></li>
+<li><a href="#finops">第九幕：FinOps——每百万请求到底花多少钱？</a></li>
+<li><a href="#_29">单位请求成本模拟</a></li>
+<li><a href="#_30">第十幕：压测法庭——如何发现系统的真正极限？</a></li>
+<li><a href="#java">第十一幕：Java 工程实战——建立一套可控的高并发服务</a></li>
+<li><a href="#_41">第十二幕：三千万账单的最终审判</a></li>
+<li><a href="#_42">帝国成本改革结果 · 虚构数据</a></li>
+<li><a href="#_43">第十三幕：高级架构师的十道资源试炼</a></li>
+<li><a href="#_44">尾声：真正的高手，不是拥有最多服务器的人</a></li>
+<li><a href="#_45">下一章：《终极工程——亲手构建高并发与大数据平台》</a></li>
+</ul>
+</div>
+</details><article><blockquote>
+<p>阅读提示：线程池通常先使用核心线程，再入队，队列满后才尝试扩至最大线程数。CPU 使用率不能代表所有资源容量；扩容、成本优化都要同时满足延迟与可靠性目标。</p>
+</blockquote>
+<p>上一章，Spring 王国通过 ClickHouse、StarRocks、列式存储、稀疏索引和物化视图，解决了百亿级数据的分析难题。</p>
+<p>然而，帝国财政大臣很快发现了一个可怕的事实。</p>
+<p>系统越来越快，机器越来越多，用户越来越满意。</p>
+<p>可是国库，快空了。</p>
+<p>这一章，我们将深入高并发与大数据的另一面：容量规划、排队论、线程池、连接池、CPU 与内存瓶颈、Kafka/Flink/Spark 资源竞争、Kubernetes 弹性伸缩，以及 PB 级数据的成本治理。</p>
+<h2 id="_1">第一幕：一份价值三千万的账单</h2>
+<p>数据大陆，帝国历第十一年。</p>
+<p>清晨。</p>
+<p>国王 Java 正在检阅最新的系统性能报告。</p>
+<p>监控官满脸喜悦。</p>
+<p>“陛下！我们的 API P99 只有 120 毫秒！”</p>
+<p>“百万 WebSocket 连接稳定运行！”</p>
+<p>“实时计算延迟始终保持在数秒范围内！”</p>
+<p>“ClickHouse 的绝大多数高频查询都能快速返回！”</p>
+<p>国王十分满意。</p>
+<p>“看来我们的技术改革终于完成了。”</p>
+<p>突然。</p>
+<p>皇宫大门被猛地推开。</p>
+<p>财政大臣抱着一叠厚厚的账单冲进大殿。</p>
+<p>“陛下！”</p>
+<p>“我们要破产了！”</p>
+<p>国王眉头一皱。</p>
+<p>“怎么回事？”</p>
+<p>财政大臣将账单拍在桌上。</p>
+<p><strong>数据帝国月度资源账单 · 虚构案例</strong></p>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>情况</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>总月成本</td>
+<td>¥3,000 万</td>
+</tr>
+<tr>
+<td>预算状态</td>
+<td>成本超预算</td>
+</tr>
+<tr>
+<td>费用范围</td>
+<td>在线应用、Kafka、Flink、Spark、数据存储、网络及其他</td>
+</tr>
+</tbody>
+</table>
+<p>原稿图表的各项数值未完整保留，因此不重建分类金额；总额为小说假设，不代表实际定价。</p>
+<p>国王震惊。</p>
+<p>“三千万？”</p>
+<p>“我们的营业额不是正在增长吗？”</p>
+<p>财政大臣说道：</p>
+<p>“是的，陛下。”</p>
+<p>“可是技术资源成本增长得更快。”</p>
+<p>“去年每百万次 API 请求的基础设施成本是二十元。”</p>
+<p>“今年某些业务链路已经上涨到五十元。”</p>
+<p>“更可怕的是，我们的 Spark 集群凌晨仍然占用大量服务器，而那些服务器很多时候几乎没有计算任务。”</p>
+<p>“Flink 集群也预留了远高于日常负载的容量。”</p>
+<p>“ClickHouse 的历史数据越来越多。”</p>
+<p>“Kafka 里保存着大量已经不再需要频繁访问的事件。”</p>
+<p>国王转头看向首席架构师。</p>
+<p>“难道我们以前的架构设计错了？”</p>
+<p>架构师沉默片刻。</p>
+<p>“不一定。”</p>
+<p>“陛下，架构设计从来不只是追求极限性能。”</p>
+<p>“当业务发展到一定规模，成本也会成为必须满足的工程约束。”</p>
+<p><img alt="故事场景插图" src="https://images.openai.com/static-rsc-4/nBTqqB9s8kzScUYZgo3b1JigFF-b3jXFgoPdusCZx9GaLQyUt_vFN5576Lrtjo5ODxfsUtLRWamwbHhenHqYzM_BLGDpdzTDR0PCPwC3PsI4kxeb750ma18LsrSGJdqWdupTTmGEwUtMOHMoJo63J3nVu8ToIvfWNsjhxW4A0gs?purpose=inline" /></p>
+<p><em>图片来源：Kingshot Truegold Calculator | Building Upgrade Resource Planner</em></p>
+<p><a href="https://kingshotpacks.com/truegold-calculator?utm_source=chatgpt.com">kingshotpacks.com</a></p>
+<h2 id="_2">第二幕：第一条资源法则——性能不是免费的</h2>
+<p>架构师带国王来到计算资源大厅。</p>
+<p>这里排列着数千台服务器。</p>
+<p>每台服务器都有 CPU、内存、磁盘和网卡。</p>
+<p>国王问：</p>
+<p>“资源不够，我们增加服务器。”</p>
+<p>“现在资源太贵，我们减少服务器。”</p>
+<p>“是不是就这么简单？”</p>
+<p>架构师摇头。</p>
+<p>“减少服务器可能导致延迟增加。”</p>
+<p>“而增加服务器又可能产生资源浪费。”</p>
+<p>“我们真正需要找到的是：在满足业务目标的条件下，合理分配资源。”</p>
+<h3 id="_3">一、吞吐量与延迟</h3>
+<p>架构师画出一条曲线。</p>
+<p>“陛下，假设某个服务随着请求量上升，吞吐量逐渐增加。”</p>
+<p>“一开始，系统资源很充足。”</p>
+<p>“新增请求可以得到及时处理。”</p>
+<p>“但是随着某个瓶颈资源接近饱和，排队等待可能迅速增加。”</p>
+<p>“此时，即使吞吐量没有显著提升，P99 也可能明显恶化。”</p>
+<h3 id="_4">系统负载与响应时间：示意曲线</h3>
+<table>
+<thead>
+<tr>
+<th>负载阶段</th>
+<th>观察重点</th>
+<th>可能表现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>仍有余量</td>
+<td>吞吐与延迟是否满足目标</td>
+<td>延迟相对稳定</td>
+</tr>
+<tr>
+<td>接近瓶颈</td>
+<td>队列、连接等待、P99</td>
+<td>等待时间可能快速上升</td>
+</tr>
+<tr>
+<td>超过可持续容量</td>
+<td>拒绝、超时、错误、积压</td>
+<td>输入超过处理能力，系统失稳风险增加</td>
+</tr>
+</tbody>
+</table>
+<p>这是定性示意，不给出通用利用率阈值。应通过阶梯压测确定实际拐点与容量余量。</p>
+<h3 id="littles-law">二、Little's Law 再次登场</h3>
+<p>架构师拿出第一章的古老公式。</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>L</mi><mo>=</mo><mi>λ</mi><mi>W</mi></mrow><annotation encoding="application/x-tex"> L=\lambda W </annotation></semantics></math></span></p>
+<p>“陛下，还记得它吗？”</p>
+<p>“系统内平均请求数等于长期平均吞吐率乘以平均停留时间。”</p>
+<p>“假设系统稳定完成 2,000 QPS，平均请求停留 0.1 秒。”</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>L</mi><mo>=</mo><mn>2000</mn><mo>×</mo><mn>0.1</mn><mo>=</mo><mn>200</mn></mrow><annotation encoding="application/x-tex"> L=2000\times0.1=200 </annotation></semantics></math></span></p>
+<p>“系统内平均约有 200 个在途请求。”</p>
+<p>“如果吞吐率不变，但平均停留时间增加到一秒：”</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>L</mi><mo>=</mo><mn>2000</mn><mo>×</mo><mn>1</mn><mo>=</mo><mn>2000</mn></mrow><annotation encoding="application/x-tex"> L=2000\times1=2000 </annotation></semantics></math></span></p>
+<p>“在稳态条件下，系统内平均在途请求数就变为 2,000。”</p>
+<p>“但陛下，这里的 L 不是直接等于 Java 线程数。”</p>
+<p>“因为请求可能处于排队、非阻塞 I/O 或其他等待状态。”</p>
+<p>“同时，系统持续过载且队列不断增长时，不能随意用一个稳态公式预测无限增长过程。”</p>
+<p>国王点头。</p>
+<p>“所以请求变慢，本身也可能进一步加剧资源压力。”</p>
+<p>“是的。”</p>
+<h2 id="_5">第三幕：线程池——为什么更多士兵反而让王国更慢？</h2>
+<p>架构师带国王来到 Java 线程军团。</p>
+<p>军团长拿出一份配置。</p>
+<div class="codehilite"><pre><span></span><code><span class="n">ThreadPoolExecutor</span><span class="w"> </span><span class="n">executor</span><span class="w"> </span><span class="o">=</span>
+<span class="w">    </span><span class="k">new</span><span class="w"> </span><span class="n">ThreadPoolExecutor</span><span class="p">(</span>
+<span class="w">        </span><span class="mi">32</span><span class="p">,</span>
+<span class="w">        </span><span class="mi">256</span><span class="p">,</span>
+<span class="w">        </span><span class="mi">60</span><span class="p">,</span>
+<span class="w">        </span><span class="n">TimeUnit</span><span class="p">.</span><span class="na">SECONDS</span><span class="p">,</span>
+<span class="w">        </span><span class="k">new</span><span class="w"> </span><span class="n">LinkedBlockingQueue</span><span class="o">&lt;&gt;</span><span class="p">(</span><span class="mi">10000</span><span class="p">),</span>
+<span class="w">        </span><span class="k">new</span><span class="w"> </span><span class="n">ThreadPoolExecutor</span><span class="p">.</span><span class="na">AbortPolicy</span><span class="p">()</span>
+<span class="w">    </span><span class="p">);</span>
+</code></pre></div>
+
+<p>国王问：</p>
+<p>“核心线程 32，最大线程 256，队列一万。”</p>
+<p>“配置得不错吧？”</p>
+<p>架构师说道：</p>
+<p>“陛下，我们首先需要理解线程池的工作规则。”</p>
+<h3 id="threadpoolexecutor">一、ThreadPoolExecutor 的基本调度</h3>
+<p>对于上述配置，简化理解：</p>
+<ol>
+<li>工作线程少于 <code>corePoolSize</code> 时，新任务通常可以创建核心线程。</li>
+<li>核心线程达到配置数量后，优先尝试放入工作队列。</li>
+<li>队列无法接收任务时，若线程数还未达到 <code>maximumPoolSize</code>，才尝试增加工作线程。</li>
+<li>线程数和队列都达到限制后，执行拒绝策略。</li>
+</ol>
+<p>“因此，在一个容量为一万的 LinkedBlockingQueue 尚未填满时，线程池可能长期只有 32 个核心工作线程，尽管 maximumPoolSize 设置了 256。”</p>
+<p>国王大惊。</p>
+<p>“也就是说，我设置了最大线程数 256，不代表高负载时会立即使用 256 个线程？”</p>
+<p>“正是。”</p>
+<h3 id="_6">二、大队列为何危险？</h3>
+<p>架构师继续解释：</p>
+<p>“假设任务持续到来的速度高于线程池处理能力。”</p>
+<p>“队列就会逐渐积压。”</p>
+<p>“哪怕每个任务本身只需要几十毫秒，排队时间也可能增长到几秒甚至几十秒。”</p>
+<p>“用户最终看到的是完整响应时间，而不是业务方法单独执行时间。”</p>
+<h3 id="_7">三、拒绝策略</h3>
+<p>架构师展示常见策略。</p>
+<table>
+<thead>
+<tr>
+<th>策略</th>
+<th>典型行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AbortPolicy</td>
+<td>抛出拒绝异常</td>
+</tr>
+<tr>
+<td>CallerRunsPolicy</td>
+<td>由提交任务的线程尝试执行任务</td>
+</tr>
+<tr>
+<td>DiscardPolicy</td>
+<td>丢弃被拒绝任务</td>
+</tr>
+<tr>
+<td>DiscardOldestPolicy</td>
+<td>尝试丢弃队列头部任务再提交</td>
+</tr>
+</tbody>
+</table>
+<p>“陛下，选择拒绝策略必须结合业务语义。”</p>
+<p>“不能让支付任务被静默丢弃。”</p>
+<p>“而 CallerRunsPolicy 虽然可能对上游产生一定反压效果，但也可能阻塞 HTTP 请求线程或者消息消费线程。”</p>
+<h3 id="_8">四、线程数应该如何估算？</h3>
+<p>国王问：</p>
+<p>“那到底多少线程才合理？”</p>
+<p>架构师说道：</p>
+<p>“对于计算密集型任务，可以从可用 CPU 核数、任务计算比例和调度开销入手。”</p>
+<p>“对于存在大量阻塞等待的任务，可能需要更多并发执行单元。”</p>
+<p>“一条常见的粗略经验公式是：”</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>N</mi><mo>≈</mo><msub><mi>N</mi><mtext>CPU</mtext></msub><mrow><mo fence="true">(</mo><mn>1</mn><mo>+</mo><mfrac><mi>W</mi><mi>C</mi></mfrac><mo fence="true">)</mo></mrow></mrow><annotation encoding="application/x-tex"> N\approx N_{\text{CPU}} \left(1+\frac{W}{C}\right) </annotation></semantics></math></span></p>
+<p>其中：</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi></mrow><annotation encoding="application/x-tex">W</annotation></semantics></math></span>：任务等待时间。</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>C</mi></mrow><annotation encoding="application/x-tex">C</annotation></semantics></math></span>：任务实际计算时间。</p>
+<p>“但这只是特定假设下的容量估算启发式，不是可以无条件套用的定律。”</p>
+<p>“最终还要考虑数据库连接池、外部服务限流和内存资源。”</p>
+<h3 id="java-21">五、Java 21 虚拟线程能解决吗？</h3>
+<p>国王突然想起来。</p>
+<p>“我们可以使用 Virtual Thread！”</p>
+<p>架构师点头。</p>
+<p>“Java 21 虚拟线程可以显著降低大量阻塞式任务长期占用平台线程的成本，尤其适合大量等待型任务。”</p>
+<p>“但虚拟线程不能把一台数据库的处理吞吐量变成无限大。”</p>
+<p>“如果 MySQL 连接池只有 100 个连接，即使同时创建十万个虚拟线程，最终也仍然要面对连接池容量和下游吞吐约束。”</p>
+<p>“对于 CPU 密集型任务，虚拟线程也不能创造额外 CPU 核心。”</p>
+<blockquote>
+<p>线程池优化的目标不是让线程数量最大，而是让资源使用、任务排队和响应延迟保持可控。</p>
+</blockquote>
+<h2 id="_9">第四幕：连接池之门——一千个线程争夺一百张通行证</h2>
+<p>夜幕降临。</p>
+<p>MySQL 巨城入口出现了一条长队。</p>
+<p>一千个 Java 工作线程同时等待数据库连接。</p>
+<p>但城门只有一百张通行证。</p>
+<p>国王问：</p>
+<p>“为什么不将连接池直接增大到一千？”</p>
+<p>数据库总督立即反对。</p>
+<p>“陛下，每个数据库连接也会占用数据库资源。”</p>
+<p>“更多连接不意味着更高的数据库吞吐。”</p>
+<h3 id="_10">一、连接池的本质</h3>
+<p>“假设 HikariCP 最大连接数为 100。”</p>
+<p>“那么应用实例最多通过这个连接池持有配置数量范围内的数据库连接。”</p>
+<p>“请求借用连接时，如果可用连接不足，就可能等待。”</p>
+<p>“等待超过配置时间，会出现连接获取超时。”</p>
+<h3 id="_11">二、真正要监控什么？</h3>
+<p>架构师要求监控官记录：</p>
+<ul>
+<li>活跃连接数。</li>
+<li>空闲连接数。</li>
+<li>等待连接的线程数量。</li>
+<li>获取连接的等待时间。</li>
+<li>数据库事务执行时间。</li>
+<li>数据库 CPU、I/O、锁等待和慢查询。</li>
+</ul>
+<p>“如果应用连接池长期满载，不一定代表应该扩容连接池。”</p>
+<p>“可能是 SQL 慢。”</p>
+<p>“可能是事务范围过大。”</p>
+<p>“也可能是业务线程在持有连接期间等待第三方接口返回。”</p>
+<h3 id="_12">三、长事务的危险</h3>
+<p>架构师找到一段代码。</p>
+<div class="codehilite"><pre><span></span><code><span class="nd">@Transactional</span>
+<span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">createOrder</span><span class="p">(</span><span class="n">OrderRequest</span><span class="w"> </span><span class="n">req</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">orderRepository</span><span class="p">.</span><span class="na">save</span><span class="p">(</span><span class="n">buildOrder</span><span class="p">(</span><span class="n">req</span><span class="p">));</span>
+
+<span class="w">    </span><span class="n">paymentClient</span><span class="p">.</span><span class="na">requestPayment</span><span class="p">(</span><span class="n">req</span><span class="p">);</span>
+
+<span class="w">    </span><span class="n">notificationClient</span><span class="p">.</span><span class="na">sendMessage</span><span class="p">(</span><span class="n">req</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>国王问：</p>
+<p>“有什么问题？”</p>
+<p>架构师回答：</p>
+<p>“如果事务代理在这段方法里已经开启数据库事务，那么外部支付调用和通知调用可能被包含在事务生命周期内。”</p>
+<p>“这会延长事务，甚至让数据库连接、锁等资源被不必要地持有。”</p>
+<p>“因此，应该根据业务原子性边界，将外部调用与数据库事务合理拆分，利用 Outbox、异步任务或状态机处理跨系统流程。”</p>
+<h3 id="_13">四、连接池容量不能只看单个实例</h3>
+<p>架构师又写了一行：</p>
+<div class="codehilite"><pre><span></span><code>Java 实例数：100
+每实例连接池上限：50
+理论应用连接上限：5000
+</code></pre></div>
+
+<p>“陛下，如果数据库最多只适合承担远少于 5000 个活跃连接对应的实际负载，这个集群配置就需要重新考虑。”</p>
+<p>“应用横向扩容时，数据库总连接上限也会随之上升。”</p>
+<p>“这就是为什么必须进行端到端容量规划。”</p>
+<h2 id="cpu-30-api">第五幕：CPU 只有 30%，为什么 API 还是很慢？</h2>
+<p>第二天。</p>
+<p>监控官带来一份奇怪的报告。</p>
+<p>“陛下！某个服务的 CPU 使用率只有 30%。”</p>
+<p>“但是 API P99 已经达到两秒。”</p>
+<p>国王问：</p>
+<p>“CPU 都没满，怎么可能成为性能问题？”</p>
+<p>架构师说道：</p>
+<p>“因为 CPU 使用率只是众多指标之一。”</p>
+<h3 id="cpu">一、CPU 低、请求慢的可能原因</h3>
+<p>第一种，等待数据库连接。</p>
+<p>第二种，等待 MySQL 行锁。</p>
+<p>第三种，等待网络 I/O。</p>
+<p>第四种，等待外部 HTTP 服务。</p>
+<p>第五种，线程池排队。</p>
+<p>第六种，少数 CPU 核心局部热点或线程竞争。</p>
+<p>第七种，频繁短暂停顿、内存分配或其他运行时问题。</p>
+<p>“陛下，整体 CPU 30% 并不意味着每个 CPU 核心、每个工作线程和每个共享依赖都只有 30% 负载。”</p>
+<h3 id="cpu_1">二、CPU 利用率与吞吐量</h3>
+<p>架构师解释：</p>
+<p>“如果 CPU 是主要瓶颈，增加 CPU 资源可能提高处理能力。”</p>
+<p>“但如果请求主要在等待数据库，增加 CPU 往往帮助很小。”</p>
+<p>“所以性能优化必须从实际瓶颈出发。”</p>
+<h3 id="_14">三、四类资源瓶颈</h3>
+<p>CPU</p>
+<p>计算密集、序列化、压缩、加密、GC、热点线程。</p>
+<p>内存</p>
+<p>Heap、直接内存、缓存、状态大小、OOM 与内存回收。</p>
+<p>磁盘</p>
+<p>吞吐量、随机 I/O、IOPS、延迟、队列与后台合并。</p>
+<p>网络</p>
+<p>带宽、RTT、丢包、连接数、重传与跨机数据交换。</p>
+<p>架构师说道：</p>
+<p>“例如 Spark Shuffle 很慢，可能并不是 CPU 算不过来，而是磁盘 Spill 和网络传输成为瓶颈。”</p>
+<p>“Redis 延迟升高，也可能来自网络、慢命令、热点访问或服务器资源竞争。”</p>
+<p>“要先定位，再优化。”</p>
+<h2 id="_15">第六幕：实时军团与离线军团的资源争夺</h2>
+<p>Spring 王国的资源大厅里，两个军团爆发了一场争吵。</p>
+<p>Flink 将军说：</p>
+<p>“我的作业必须持续处理支付事件。”</p>
+<p>“如果延迟超过五秒，直播大屏就会出现明显滞后。”</p>
+<p>Spark 将军反驳：</p>
+<p>“我的历史重算任务同样重要。”</p>
+<p>“财务月底对账，必须完成全量计算。”</p>
+<p>双方同时要求使用一批最昂贵的服务器。</p>
+<p>国王十分头疼。</p>
+<p>“难道不能让他们共享资源吗？”</p>
+<p>架构师回答：</p>
+<p>“可以，但必须考虑隔离和优先级。”</p>
+<h3 id="_16">一、实时任务与离线任务的不同</h3>
+<p>Flink 实时作业通常长期运行。</p>
+<p>它可能具有较严格的连续处理延迟和状态恢复要求。</p>
+<p>Spark 离线作业通常有明确的计算批次。</p>
+<p>一些任务可以延迟执行，也可能在不同时间段需要大量资源。</p>
+<p>“所以我们可以根据业务 SLA，划分资源池。”</p>
+<h3 id="_17">二、资源隔离</h3>
+<p>架构师提出：</p>
+<div class="codehilite"><pre><span></span><code>实时资源池
+    Flink 核心任务
+    低延迟在线统计
+    关键数据管道
+
+离线资源池
+    Spark 历史重算
+    ETL 批处理
+    模型特征加工
+
+共享弹性资源池
+    可延迟计算
+    弹性扩容任务
+</code></pre></div>
+
+<p>“这不是说实时和离线永远不能共享机器。”</p>
+<p>“而是共享时要有优先级、资源上限和抢占规则，避免一个低优先级任务破坏核心在线 SLA。”</p>
+<h3 id="_18">三、为什么单纯提高资源利用率可能是错的？</h3>
+<p>国王问：</p>
+<p>“如果我们让每台服务器 CPU 都达到 95%，是不是资源利用率就非常好了？”</p>
+<p>架构师摇头。</p>
+<p>“资源利用率高，不一定表示系统效率最优。”</p>
+<p>“如果某个实时服务需要保留突发容量，而我们把空闲资源全部交给无法及时中断的离线任务，流量高峰到来时就可能没有足够的资源恢复余量。”</p>
+<p>“因此，适当的冗余容量本身具有可用性价值。”</p>
+<h2 id="kubernetes">第七幕：Kubernetes 弹性军团——让服务器随流量增减</h2>
+<p>架构师带国王来到 Kubernetes 调度中心。</p>
+<p>国王问：</p>
+<p>“能不能让系统自动增加或者减少服务实例？”</p>
+<p>“可以。”</p>
+<p>“但我们要区分几种不同的扩容机制。”</p>
+<h3 id="hpa-pod">一、HPA：扩缩 Pod 数量</h3>
+<p>HPA，Horizontal Pod Autoscaler。</p>
+<p>它可以根据 CPU、内存或其他受支持的指标调整工作负载副本数量。</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">autoscaling/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">HorizontalPodAutoscaler</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">order-service-hpa</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">scaleTargetRef</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apps/v1</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deployment</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">order-service</span>
+<span class="w">  </span><span class="nt">minReplicas</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">  </span><span class="nt">maxReplicas</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">40</span>
+<span class="w">  </span><span class="nt">metrics</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Resource</span>
+<span class="w">      </span><span class="nt">resource</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cpu</span>
+<span class="w">        </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Utilization</span>
+<span class="w">          </span><span class="nt">averageUtilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60</span>
+</code></pre></div>
+
+<p>架构师说道：</p>
+<p>“这个示例表示基于 CPU 使用率目标调整副本数量。”</p>
+<p>“注意，这里的 CPU 利用率百分比，通常是相对于容器配置的 CPU Request 来计算，而不是简单地按宿主机总 CPU 核数计算。”</p>
+<p>“HPA 是周期性控制循环，不是请求一增加就瞬间完成扩容。”&#x20;</p>
+<h3 id="keda">二、KEDA：基于事件驱动指标扩容</h3>
+<p>国王问：</p>
+<p>“如果 Kafka Lag 持续上涨，但 CPU 并不高呢？”</p>
+<p>架构师答道：</p>
+<p>“可以考虑 KEDA。”</p>
+<p>“KEDA 能够利用支持的事件源指标，驱动 Kubernetes 工作负载扩缩容。”</p>
+<p>“例如使用 Kafka 消费积压指标来决定某些消费者部署需要多少副本。”</p>
+<p>“但这不意味着 Kafka Lag 高就一定该扩容。”</p>
+<p>“如果瓶颈在下游 MySQL，增加消费者可能进一步扩大压力。”</p>
+<h3 id="_19">三、节点扩容</h3>
+<p>“如果 HPA 把 Pod 副本数增加到 40，但 Kubernetes 集群没有足够的计算资源，新 Pod 可能无法调度。”</p>
+<p>“这时，还需要节点级的容量管理机制。”</p>
+<p>“某些环境会使用 Cluster Autoscaler、Karpenter 或云平台提供的其他节点自动供给方案。”</p>
+<p>“但新增节点也需要时间。”</p>
+<h3 id="_20">四、扩容速度也是一种资源</h3>
+<p>国王问：</p>
+<p>“如果新节点需要一分钟才能准备好，而流量十秒内就冲上来了，怎么办？”</p>
+<p>架构师回答：</p>
+<p>“这就是为什么大促需要提前预热与容量准备。”</p>
+<p>“自动扩缩容适合处理很多负载变化，但不能代替峰值容量规划。”</p>
+<h2 id="pb">第八幕：PB 级存储——为什么有些数据应该离开昂贵的城堡？</h2>
+<p>三个月后。</p>
+<p>数据仓库管理员走进皇宫。</p>
+<p>“陛下，存储费用仍然很高。”</p>
+<p>“可是我们已经优化压缩率了。”</p>
+<p>管理员回答：</p>
+<p>“问题不是只有压缩率。”</p>
+<p>“我们把五年前的日志和昨天的日志放在同一种高性能存储中。”</p>
+<p>“但五年前的日志可能几个月都没有人查询一次。”</p>
+<p>架构师点头。</p>
+<p>“这就是冷热分层的问题。”</p>
+<h3 id="_21">一、热数据</h3>
+<p>热数据通常具有较高访问频率或低延迟要求。</p>
+<p>例如：</p>
+<ul>
+<li>最近数日的实时交易统计。</li>
+<li>正在使用的业务缓存。</li>
+<li>高频 OLAP 聚合数据。</li>
+</ul>
+<p>“它可能需要较高性能的存储和计算资源。”</p>
+<h3 id="_22">二、温数据</h3>
+<p>温数据访问频率较低，但仍然需要合理的查询性能。</p>
+<p>例如历史数月的交易明细、近期审计记录。</p>
+<p>“可以根据具体工作负载选择更便宜的存储层或降低计算资源配置。”</p>
+<h3 id="_23">三、冷数据</h3>
+<p>冷数据可能长时间不被访问。</p>
+<p>例如多年前的历史日志。</p>
+<p>“它可以采用更低成本的归档存储策略。”</p>
+<p>“但这可能带来更长的数据恢复和读取时间，以及额外的取回费用。”</p>
+<h3 id="_24">数据生命周期与分层存储</h3>
+<table>
+<thead>
+<tr>
+<th>数据层</th>
+<th>示例时间范围</th>
+<th>访问方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>热数据</td>
+<td>最近 7 天</td>
+<td>低延迟查询、高频计算</td>
+</tr>
+<tr>
+<td>温数据</td>
+<td>第 8–90 天</td>
+<td>常规分析、历史回溯</td>
+</tr>
+<tr>
+<td>冷数据</td>
+<td>超过 90 天</td>
+<td>低频查询、归档恢复</td>
+</tr>
+</tbody>
+</table>
+<p>时间范围仅为教学示例；分层应结合访问模式、留存要求、恢复目标和成本确定。</p>
+<h3 id="_25">四、为什么不能随意删除历史数据？</h3>
+<p>国王问：</p>
+<p>“既然冷数据很少访问，直接删除岂不是最便宜？”</p>
+<p>架构师摇头。</p>
+<p>“我们需要考虑法律与合规要求、交易审计、故障回溯、模型训练以及数据重算。”</p>
+<p>“但也不能以‘以后可能有用’为理由无限期保存所有敏感数据。”</p>
+<p>“必须制定明确的数据保留和删除策略。”</p>
+<h3 id="tb">五、存储成本不仅是每 TB 的价格</h3>
+<p>架构师写下一份成本公式。</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>C</mi><mtext>storage</mtext></msub><mo>=</mo><msub><mi>C</mi><mtext>capacity</mtext></msub><mo>+</mo><msub><mi>C</mi><mtext>requests</mtext></msub><mo>+</mo><msub><mi>C</mi><mtext>retrieval</mtext></msub><mo>+</mo><msub><mi>C</mi><mtext>transfer</mtext></msub><mo>+</mo><msub><mi>C</mi><mtext>operations</mtext></msub></mrow><annotation encoding="application/x-tex"> C_{\text{storage}} = C_{\text{capacity}} + C_{\text{requests}} + C_{\text{retrieval}} + C_{\text{transfer}} + C_{\text{operations}} </annotation></semantics></math></span></p>
+<p>“冷存储容量单价可能更低，但数据恢复、读取、请求操作和跨区域传输也可能产生费用。”</p>
+<p>“如果一份冷数据每天都被读取，所谓的便宜存储未必划算。”</p>
+<h2 id="finops">第九幕：FinOps——每百万请求到底花多少钱？</h2>
+<p>国王终于召见财政大臣。</p>
+<p>“我们现在知道应该如何节省服务器和存储成本。”</p>
+<p>“可怎样衡量优化是否真的有效？”</p>
+<p>架构师说道：</p>
+<p>“我们需要建立单位成本模型。”</p>
+<p>“这也是 FinOps 中的重要思想：将技术资源消耗与具体的业务价值联系起来。”</p>
+<p>FinOps Foundation 的 Unit Economics 能力强调，通过每请求、每交易、每存储单位等指标，理解技术资源消耗与业务产出的关系。</p>
+<h3 id="_26">一、每百万请求成本</h3>
+<p>假设某业务一个月的可归属基础设施成本为 100 万元。</p>
+<p>这个月成功处理了 500 亿次 API 请求。</p>
+<p>则：</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>C</mi><mtext>million</mtext></msub><mo>=</mo><mfrac><mn>1000000</mn><mn>50000000000</mn></mfrac><mo>×</mo><mn>1000000</mn></mrow><annotation encoding="application/x-tex"> C_{\text{million}} = \frac{1000000}{50000000000}\times1000000 </annotation></semantics></math></span></p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mo>=</mo><mn>20</mn><mtext> 元/百万请求</mtext></mrow><annotation encoding="application/x-tex"> =20\text{ 元/百万请求} </annotation></semantics></math></span></p>
+<p>“这意味着每百万次请求对应约 20 元的这部分基础设施成本。”</p>
+<p>“但如果我们没有计入网络传输、数据库、缓存、可观测性以及共享资源费用，就不能称之为完整成本。”</p>
+<h3 id="_27">二、每笔交易成本</h3>
+<p>“有些业务更适合观察每笔成功交易的成本。”</p>
+<p>例如：</p>
+<p>支付系统。</p>
+<p>优惠券履约系统。</p>
+<p>订单创建系统。</p>
+<p>“因为单纯提高请求数量可能让每百万请求成本看起来下降，但并不意味着产生了更多真实业务价值。”</p>
+<h3 id="tb_1">三、每 TB 计算成本</h3>
+<p>“对于 Spark 离线任务，可以记录处理数据规模、执行时长、CPU 时间、内存资源和云账单。”</p>
+<p>“但每 TB 成本并不能单独衡量任务是否高效。”</p>
+<p>“因为扫描一 TB 原始日志，与执行涉及大规模 Join 和排序的一 TB 分析任务，计算难度可能完全不同。”</p>
+<h3 id="_28">四、单位成本的交互实验</h3>
+<h2 id="_29">单位请求成本模拟</h2>
+<div class="lab" data-lab="unitcost"></div>
+
+<p>国王问：</p>
+<p>“如果成本下降了 40%，但 P99 从 200 毫秒变成 5 秒，这算优化成功吗？”</p>
+<p>架构师回答：</p>
+<p>“通常不能只凭成本数字宣布成功。”</p>
+<p>“还必须检查业务规定的服务等级目标有没有被破坏。”</p>
+<p>“成熟的成本治理，是在性能、可靠性、正确性与费用之间找到满足约束的方案。”</p>
+<h2 id="_30">第十幕：压测法庭——如何发现系统的真正极限？</h2>
+<p>帝国财政危机逐渐缓解。</p>
+<p>国王决定举办一次真正的全链路容量测试。</p>
+<p>“架构师，这次我们不再只测试 QPS。”</p>
+<p>“我要知道整个系统的承载极限。”</p>
+<p>架构师拿出了五种测试。</p>
+<h3 id="_31">一、基线测试</h3>
+<p>在正常负载下建立性能基线。</p>
+<p>记录吞吐量、P50、P95、P99、错误率、资源利用率与单位成本。</p>
+<h3 id="_32">二、阶梯加压</h3>
+<p>按照逐步增长的请求速率进行测试。</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>1000 QPS
+    ↓
+2000 QPS
+    ↓
+4000 QPS
+    ↓
+6000 QPS
+    ↓
+8000 QPS
+</code></pre></div>
+
+<p>“每个阶段都观察是否达到稳态，以及延迟和错误率是否恶化。”</p>
+<h3 id="_33">三、突发流量测试</h3>
+<p>突然提升请求速率。</p>
+<p>验证限流、排队、缓存、线程池以及弹性伸缩能否合理应对。</p>
+<h3 id="_34">四、长时间稳定性测试</h3>
+<p>持续运行数小时甚至更长时间。</p>
+<p>检查内存泄漏、连接泄漏、Kafka 积压、Flink Checkpoint、磁盘增长等问题。</p>
+<h3 id="_35">五、故障注入测试</h3>
+<p>让部分服务实例不可用，验证系统是否仍能满足核心业务的降级或恢复目标。</p>
+<p>“但陛下，故障演练需要严格隔离和控制影响范围，不能无防护地破坏真实生产数据。”</p>
+<h3 id="_36">六、开放模型与封闭模型</h3>
+<p>架构师又提出一个更加深入的问题。</p>
+<p>“如果压测工具只有一百个并发用户，每个用户都必须等前一个请求返回后，才发送下一次请求，会怎样？”</p>
+<p>国王思考片刻。</p>
+<p>“服务器变慢以后，每个用户发请求也会变慢。”</p>
+<p>“是的。”</p>
+<p>“这叫封闭负载模型的一种典型行为。”</p>
+<p>“如果我们希望模拟外部请求按照固定速率到达，而不随着服务器延迟自动减少，就需要考虑开放负载模型。”</p>
+<p>“不同负载模型会影响压测结果。”</p>
+<p>“因此，报告高并发吞吐量时，必须说明压测工具、请求发送模型与响应时间统计方式。”</p>
+<h2 id="java">第十一幕：Java 工程实战——建立一套可控的高并发服务</h2>
+<p>经过一系列资源优化，架构师决定亲自改造订单服务。</p>
+<p>原本的代码十分简单：</p>
+<div class="codehilite"><pre><span></span><code><span class="nd">@PostMapping</span><span class="p">(</span><span class="s">&quot;/orders&quot;</span><span class="p">)</span>
+<span class="kd">public</span><span class="w"> </span><span class="n">Order</span><span class="w"> </span><span class="nf">create</span><span class="p">(</span><span class="nd">@RequestBody</span><span class="w"> </span><span class="n">OrderRequest</span><span class="w"> </span><span class="n">req</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">orderService</span><span class="p">.</span><span class="na">create</span><span class="p">(</span><span class="n">req</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>国王问：</p>
+<p>“这有什么问题？代码很正常。”</p>
+<p>架构师点头。</p>
+<p>“代码本身没有必然问题。”</p>
+<p>“但在高负载下，我们需要明确这条请求链路能够使用多少资源。”</p>
+<h3 id="_37">一、数据库连接池必须有上限</h3>
+<p>例如配置 HikariCP：</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">spring</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">datasource</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">hikari</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">maximum-pool-size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+<span class="w">      </span><span class="nt">minimum-idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">      </span><span class="nt">connection-timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3000</span>
+</code></pre></div>
+
+<p>“这是一组示例值，绝非所有 Java 项目的最佳配置。”</p>
+<p>“应根据应用实例数量、数据库容量、事务执行时间和压测结果决定。”</p>
+<h3 id="_38">二、异步任务不能无限排队</h3>
+<p>对于可异步执行的普通业务任务，可以设计有界线程池。</p>
+<div class="codehilite"><pre><span></span><code><span class="nd">@Bean</span>
+<span class="kd">public</span><span class="w"> </span><span class="n">ThreadPoolTaskExecutor</span><span class="w"> </span><span class="nf">businessExecutor</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">ThreadPoolTaskExecutor</span><span class="w"> </span><span class="n">executor</span><span class="w"> </span><span class="o">=</span>
+<span class="w">            </span><span class="k">new</span><span class="w"> </span><span class="n">ThreadPoolTaskExecutor</span><span class="p">();</span>
+
+<span class="w">    </span><span class="n">executor</span><span class="p">.</span><span class="na">setCorePoolSize</span><span class="p">(</span><span class="mi">16</span><span class="p">);</span>
+<span class="w">    </span><span class="n">executor</span><span class="p">.</span><span class="na">setMaxPoolSize</span><span class="p">(</span><span class="mi">32</span><span class="p">);</span>
+<span class="w">    </span><span class="n">executor</span><span class="p">.</span><span class="na">setQueueCapacity</span><span class="p">(</span><span class="mi">500</span><span class="p">);</span>
+
+<span class="w">    </span><span class="n">executor</span><span class="p">.</span><span class="na">setThreadNamePrefix</span><span class="p">(</span><span class="s">&quot;biz-&quot;</span><span class="p">);</span>
+<span class="w">    </span><span class="n">executor</span><span class="p">.</span><span class="na">setRejectedExecutionHandler</span><span class="p">(</span>
+<span class="w">        </span><span class="k">new</span><span class="w"> </span><span class="n">ThreadPoolExecutor</span><span class="p">.</span><span class="na">AbortPolicy</span><span class="p">()</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="n">executor</span><span class="p">.</span><span class="na">initialize</span><span class="p">();</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">executor</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>“但需要明确，这种线程池只适合与其业务语义匹配的任务。”</p>
+<p>“如果任务必须保证在进程宕机后继续执行，仅提交到内存线程池并不够。”</p>
+<p>“那类任务应考虑持久化、可靠消息和补偿机制。”</p>
+<h3 id="_39">三、超时预算必须贯穿整个请求</h3>
+<p>假设 API 总延迟预算为 500ms。</p>
+<p>架构师提出：</p>
+<div class="codehilite"><pre><span></span><code>Gateway 与前置处理
+          ↓
+业务校验
+          ↓
+数据库事务
+          ↓
+响应序列化
+</code></pre></div>
+
+<p>“我们不能让每个下游调用都独立设置 5 秒超时，而整条 API 又要求 500ms 返回。”</p>
+<p>“需要设计端到端 Deadline，并合理分配各阶段时间预算。”</p>
+<p>“超时并不意味着底层操作一定被成功取消。”</p>
+<p>“尤其涉及数据库提交和支付操作时，超时后必须明确结果可能未知，不能直接无条件重试非幂等操作。”</p>
+<h3 id="_40">四、限流必须与容量相匹配</h3>
+<p>国王问：</p>
+<p>“如果数据库只能处理每秒 3000 次写入，但 Gateway 每秒允许 10000 次创建订单，会怎样？”</p>
+<p>架构师回答：</p>
+<p>“请求仍然可能在连接池、线程池或数据库入口排队。”</p>
+<p>“所以限流阈值要综合下游真实处理能力。”</p>
+<p>“分布式限流还需要考虑全局限额与实例本地限额的关系。”</p>
+<h2 id="_41">第十二幕：三千万账单的最终审判</h2>
+<p>三个月后。</p>
+<p>财政大臣再次来到皇宫。</p>
+<p>这一次，他带来的账单明显变薄了。</p>
+<p>架构师已经采取了一系列措施。</p>
+<p>对低负载时段的无状态 API 实例进行合理缩容。</p>
+<p>通过优化 Spark 任务执行计划，减少重复数据扫描和不必要 Shuffle。</p>
+<p>让可延迟的离线任务使用更合适的计算时段与资源池。</p>
+<p>优化 Kafka 数据保留策略。</p>
+<p>为历史数据建立冷热分层。</p>
+<p>改进 ClickHouse 批量写入与查询模型。</p>
+<p>减少重复的预聚合计算。</p>
+<p>同时保留关键系统的容量余量和故障恢复能力。</p>
+<h2 id="_42">帝国成本改革结果 · 虚构数据</h2>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>虚构结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>优化前月成本</td>
+<td>3,000 万元</td>
+</tr>
+<tr>
+<td>优化后月成本</td>
+<td>2,100 万元</td>
+</tr>
+<tr>
+<td>成本下降</td>
+<td>30%</td>
+</tr>
+</tbody>
+</table>
+<p>小说中的假设结果，不是实际云账单或优化效果。成本评价还需核对原有 SLO、正确性与恢复能力。</p>
+<p>国王大喜。</p>
+<p>“我们每个月少花了九百万！”</p>
+<p>“性能有没有下降？”</p>
+<p>架构师拿出第二份报告。</p>
+<p>“在本次虚构验收条件下，关键业务的 P99、错误率与数据正确性指标仍然满足约定目标。”</p>
+<p>“但是，陛下，我们不能保证未来流量变化后仍然如此。”</p>
+<p>“所以必须持续监控资源使用趋势、成本变化与 SLO。”</p>
+<p>“尤其不能在省钱之后，把原有的可靠性余量全部削掉。”</p>
+<h2 id="_43">第十三幕：高级架构师的十道资源试炼</h2>
+<p>经历了成本危机，国王组织了一场高级 Java 与大数据工程师考试。</p>
+<div class="quiz" data-quiz="11"></div>
+
+<h2 id="_44">尾声：真正的高手，不是拥有最多服务器的人</h2>
+<p>夜晚。</p>
+<p>国王 Java 独自站在王宫的最高处。</p>
+<p>他望着远方的数据大陆。</p>
+<p>MySQL 城灯火通明。</p>
+<p>Redis 要塞依然守卫着热点数据。</p>
+<p>Kafka 长河不断流淌。</p>
+<p>Flink 实时工厂持续运行。</p>
+<p>Spark 军团正在进行历史数据重算。</p>
+<p>ClickHouse 与 StarRocks 分析城提供着数据洞察。</p>
+<p>Kubernetes 根据负载调配资源。</p>
+<p>所有技术都在按照自己的职责运转。</p>
+<p>国王缓缓说道：</p>
+<p>“架构师，我现在终于明白了。”</p>
+<p>“高并发不是不断增加线程。”</p>
+<p>“大数据不是无限增加存储。”</p>
+<p>“分布式不是机器越多越好。”</p>
+<p>“真正成熟的工程，是在正确性、性能、可用性、复杂度和成本之间进行权衡。”</p>
+<p>架构师微微点头。</p>
+<p>“陛下，您已经掌握了重要的基础。”</p>
+<p>“但我们还有最后一件事情没有完成。”</p>
+<p>国王转过身。</p>
+<p>“什么事情？”</p>
+<p>“我们学过了这么多技术，却还没有真正从零搭建一套完整的工程，并通过代码与压测证明它能运行。”</p>
+<p>“架构图可以画得很漂亮。”</p>
+<p>“面试题也可以回答得很好。”</p>
+<p>“但真正的工程能力，必须通过真实系统验证。”</p>
+<p>国王望向桌上的新卷宗。</p>
+<p>标题赫然写着：</p>
+<p>《十万 QPS 的终极工程——从单体 Spring Boot 到分布式生产集群》</p>
+<h2 id="_45">下一章：《终极工程——亲手构建高并发与大数据平台》</h2>
+<p>第十二章将继续保持完整小说叙事，但更加深入实际代码和工程实现。</p>
+<p>我们将从一个普通 Spring Boot 项目开始，逐步实现：</p>
+<ol>
+<li>单体系统第一版：Spring Boot、MySQL、Redis，实现订单和库存。</li>
+<li>压测第一版：使用 k6 或 JMeter 找到第一个性能瓶颈。</li>
+<li>高并发改造：Redis Lua、幂等控制、限流、事务和可靠消息。</li>
+<li>消息架构：RabbitMQ 或 Kafka 的生产、消费、异常恢复与重试。</li>
+<li>缓存与数据库优化：热点 Key、连接池、索引、慢查询。</li>
+<li>长连接服务：Netty/WebSocket、消息分发与慢客户端保护。</li>
+<li>实时数据管道：MySQL CDC、Kafka、Flink、ClickHouse。</li>
+<li>可观测性：Prometheus、Grafana、OpenTelemetry 与分布式追踪。</li>
+<li>容器化部署：Docker Compose、Kubernetes、HPA 和服务健康检查。</li>
+<li>生产验收：高并发压测、故障注入、数据对账、成本分析与完整面试复盘。</li>
+</ol>
+<p>《数据帝国》第十一章·完</p></article><section class="practice"><h2>把原理放进实验</h2><p>调整参数，观察系统如何变化。所有实验均在当前浏览器中运行。</p><a href="practice.html">查看全部交互实验 →</a> · <a href="editorial.html">内容整理与技术校正 →</a></section><nav class="chapter-nav" aria-label="上下章"><a href="chapter-10.html">← 上一章<span>OLAP 王座——ClickHouse、StarRocks 与百亿级分析战争</span></a><a href="chapter-12.html">下一章 →<span>终极工程——从一台 Spring Boot 到十万 QPS 的生产战场</span></a></nav></main></div><footer><a href="index.html">数据帝国</a><p>在故事中理解系统，在实验中观察原理。<span>现有 12 章 · 第 13 章待续</span></p><a href="https://github.com/wupzl/data-empire-reader">项目源码 ↗</a></footer>
+<dialog id="search-dialog" aria-labelledby="search-title"><div class="search-top"><h2 id="search-title">在帝国里寻找答案</h2><button id="search-close" aria-label="关闭搜索">关闭 ×</button></div><label for="query">关键词或代码，例如 Redis、背压、Checkpoint</label><input id="query" type="search" autocomplete="off" placeholder="搜索全书正文…"><p id="search-status" role="status">输入关键词，搜索 12 章内容</p><div id="search-results"></div></dialog></body></html>

@@ -57,7 +57,8 @@ for i,path in enumerate(sorted((ROOT/'chapters').glob('[0-9][0-9].md'))):
 
 cards=''
 for i,item in enumerate(metadata):
-    if i in (0,2,3,5,7): cards+=f'<div class="stage"><span>{dict([(0,"01 / 守住交易城"),(2,"02 / 海量存储"),(3,"03 / 分布式计算"),(5,"04 / 实时数据流"),(7,"05 / 系统设计")])[i]}</span><i></i></div>'
+    stages={0:'01 / 守住交易城',2:'02 / 海量存储',3:'03 / 分布式计算',5:'04 / 实时数据流',7:'05 / 系统设计',8:'06 / 可信数据与分析',10:'07 / 资源与工程验证'}
+    if i in stages: cards+=f'<div class="stage"><span>{stages[i]}</span><i></i></div>'
     cards+=f'<a class="chapter-card" href="chapter-{i+1:02}.html"><span class="chapter-number">{i+1:02}</span><div><h3>{item["title"]}</h3><p>{item["topics"]}</p></div><span class="card-meta">约 {item["minutes"]} 分钟 <b>↗</b></span></a>'
 home=f'''<main id="main" class="home"><section class="hero"><div class="hero-copy"><p class="eyebrow">一部持续连载的高并发与大数据技术小说</p><h1>每一座帝国，<br>都经历过<span>拥堵。</span></h1><p class="hero-subtitle">数据帝国 · 千万并发的战争</p><p class="intro">一万人，同时敲响交易城的城门。<br>从最后一张优惠券，到永不停歇的数据之河。<br>跟随 Java 国王与架构师，理解系统背后的取舍。</p><div class="hero-actions"><a class="primary" href="chapter-01.html">翻开第一章 <span>→</span></a><a id="resume" class="resume" href="chapter-01.html" hidden>继续上次阅读 →</a></div><p class="hero-note">{COUNT} 个章节 <span>·</span> 第 {COUNT+1} 章待续 <span>·</span> 无需登录</p></div><div class="book-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="book"><p>THE DATA<br>EMPIRE</p><div class="book-title">数据帝国<span>千万并发的战争</span></div><div class="book-symbol">∞<span>从一条请求，到千万并发</span></div><div class="book-bottom">CONCURRENCY → BIG DATA<span>VOL. 01</span></div></div><span class="art-note">技术的答案，藏在问题里。</span></div></section><section class="journey"><p class="eyebrow">FOLLOW THE PROBLEM</p><h2>先遇见问题，再认识答案。</h2><p>缓存为什么出现？消息为什么排队？数据为什么分片？让系统遇到的每一次困境，成为下一步理解的起点。</p><div class="path"><span>高并发</span><b>→</b><span>海量存储</span><b>→</b><span>分布式计算</span><b>→</b><span>实时系统</span></div></section><section class="catalog"><div class="catalog-heading"><div><p class="eyebrow">AN ONGOING STORY</p><h2>帝国的技术战争</h2></div><a href="practice.html">进入交互实验室 ↗</a></div><div class="chapter-list">{cards}</div><div class="coming" id="coming"><span>{COUNT+1:02}</span><div><h3>{BOOK["next"]["title"]}</h3><p>{BOOK["next"]["subtitle"]} · 待续</p><a href="chapter-08.html#PREVIEW">阅读预告</a></div><span class="tag">尚未发布</span></div></section><section class="reading-note"><h2>怎样读这本书</h2><p>建议顺序阅读。了解基础 Java 与数据库会更容易进入故事；网页实验无需安装中间件。已有 {COUNT} 章正文，第 {COUNT+1} 章只保留预告，后续持续更新。</p><p>阅读进度、主题和字号只保存在当前浏览器。<a href="editorial.html">查看内容整理与技术校正 →</a></p></section></main>'''
 # Resolve preview anchor from rendered Markdown instead of hardcoding a generated slug.
@@ -66,6 +67,7 @@ preview=re.search(r'<h2 id="([^"]+)">待续',last)
 home=home.replace('chapter-08.html#PREVIEW',f'chapter-{COUNT:02}.html'+('#'+preview[1] if preview else ''))
 (OUT/'index.html').write_text(page('全书目录',home),encoding='utf-8')
 labs=[('little','并发实验室'),('atomic','库存原子性'),('queue','消息积压'),('bucket','令牌桶'),('pagination','深分页'),('shard','分片路由'),('wordcount','MapReduce WordCount'),('skew','数据倾斜'),('watermark','事件时间与 Watermark'),('lag','Kafka Lag'),('capacity','API 容量规划')]
+labs += [('reconcile','数据口径与重复事件'),('granules','Granule 裁剪'),('querycost','分析查询资源模型'),('unitcost','单位请求成本'),('stocksql','数据库并发库存更新')]
 practice='# 帝国交互实验室\n\n在浏览器中修改参数、逐步执行并重置实验。结果为教学模型，适用条件见各实验说明。\n\n'+''.join(f'## {name}\n\n<div class="lab" data-lab="{key}"></div>\n\n' for key,name in labs)
 for name,title,source in [('practice','交互实验室',practice),('editorial','内容整理与技术校正',(ROOT/'EDITORIAL.md').read_text(encoding='utf-8'))]:
     body,_=render(source)
@@ -76,4 +78,4 @@ for name,title,source in [('practice','交互实验室',practice),('editorial','
 for path in (ROOT/'assets').iterdir():
     if path.is_file(): shutil.copyfile(path,OUT/path.name)
 (OUT/'.nojekyll').touch()
-print(f'Built {len(metadata)} chapters, 11 interactive labs and 3 supporting pages.')
+print(f'Built {len(metadata)} chapters, {len(labs)} interactive labs and 3 supporting pages.')

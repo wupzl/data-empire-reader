@@ -46,5 +46,29 @@
     "title": "千万级帝国——从零设计真正的高并发直播系统",
     "topics": "容量规划 · 长连接 · 高可用 · 可观测性",
     "minutes": 37
+  },
+  {
+    "number": 9,
+    "title": "数据仓库之城——从混乱日志到可信指标",
+    "topics": "指标契约 · 数仓分层 · 维度建模 · CDC · 数据治理",
+    "minutes": 34
+  },
+  {
+    "number": 10,
+    "title": "OLAP 王座——ClickHouse、StarRocks 与百亿级分析战争",
+    "topics": "MergeTree · 稀疏索引 · 去重 · 物化视图 · OLAP",
+    "minutes": 38
+  },
+  {
+    "number": 11,
+    "title": "资源之战——高并发与大数据的成本极限",
+    "topics": "线程池 · 连接池 · 弹性伸缩 · 冷热分层 · FinOps",
+    "minutes": 32
+  },
+  {
+    "number": 12,
+    "title": "终极工程——从一台 Spring Boot 到十万 QPS 的生产战场",
+    "topics": "条件更新 · Outbox · 幂等 · 部署 · 分层压测",
+    "minutes": 36
   }
 ]

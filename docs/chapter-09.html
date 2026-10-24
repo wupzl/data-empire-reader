@@ -1,0 +1,964 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="description" content="数据帝国：以 Java 后端工程师的视角，在小说和交互实验中理解高并发与大数据。现有 12 章，第 13 章待续。"><title>数据仓库之城——从混乱日志到可信指标 · 数据帝国</title><script>try{document.documentElement.dataset.theme=localStorage.getItem('de-theme')||'light';document.documentElement.style.setProperty('--reader-size',Math.max(14,Math.min(26,Number(localStorage.getItem('de-size'))||18))+'px')}catch(e){}</script><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="shelf-nav.css"><link rel="stylesheet" href="labs.css"><script src="app.js" defer></script><script src="labs.js" defer></script><script src="quizzes.js" defer></script><script src="white-theme.js" defer></script></head>
+<body data-chapter="9" data-count="12"><a class="skip" href="#main">跳到正文</a><div id="progress" aria-hidden="true"></div><header class="topbar"><a class="brand" href="index.html"><span class="emblem" aria-hidden="true">D<span>↗</span></span><span>数据帝国<small>THE DATA EMPIRE</small></span></a><nav class="shelf-nav" aria-label="学习项目导航"><a class="shelf-home" href="/">← 学习书架</a><details class="shelf-switch"><summary>切换项目 ▾</summary><div class="shelf-menu"><a href="/pytorch-apprentice/">PyTorch：炼金术士的学徒</a><a href="/ai-era-reader/">AI 纪元</a><a href="/data-empire-reader/" aria-current="true">数据帝国</a><a href="/rag-empire-reader/">RAG 帝国</a></div></details></nav><div class="controls"><button id="search-open" aria-label="搜索全书">搜索 <kbd>/</kbd></button><button id="smaller" aria-label="缩小字号">A−</button><button id="larger" aria-label="增大字号">A＋</button><button id="theme" aria-label="切换深浅色主题">◐</button></div></header>
+<div class="reader-layout"><aside class="sidebar"><p class="eyebrow">THE EMPIRE’S JOURNEY</p><nav aria-label="全书章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a><a class="current" href="chapter-09.html" aria-current="page"><span>09</span>数据仓库之城——从混乱日志到可信指标</a><a class="" href="chapter-10.html"><span>10</span>OLAP 王座——ClickHouse、StarRocks 与百亿级分析战争</a><a class="" href="chapter-11.html"><span>11</span>资源之战——高并发与大数据的成本极限</a><a class="" href="chapter-12.html"><span>12</span>终极工程——从一台 Spring Boot 到十万 QPS 的生产战场</a></nav><details class="local-toc" open><summary>本章线索</summary><div class="toc">
+<ul>
+<li><a href="#_1">第一幕：消失的两千七百万</a></li>
+<li><a href="#_2">第二幕：第一场审判——指标究竟是什么？</a></li>
+<li><a href="#_6">第三幕：四层数据仓库——从原始卷宗到帝国报告</a></li>
+<li><a href="#_7">数据仓库四层体系</a></li>
+<li><a href="#_8">第四幕：事实表与维度表——帝国必须知道每一笔交易发生了什么</a></li>
+<li><a href="#_13">第五幕：时光档案——用户换了城市，历史报表应该改变吗？</a></li>
+<li><a href="#cdc-mysql">第六幕：CDC 信使——MySQL 的每一次变化，如何传到数据仓库？</a></li>
+<li><a href="#etl-elt">第七幕：ETL 与 ELT——先加工再入库，还是先入库再加工？</a></li>
+<li><a href="#hdfsparqueticeberg">第八幕：湖仓王国——HDFS、Parquet、Iceberg 与计算引擎的分工</a></li>
+<li><a href="#_18">第九幕：两千七百万差异的真相</a></li>
+<li><a href="#_26">数据口径与重复事件模拟器</a></li>
+<li><a href="#_27">第十幕：数据血缘——一项错误指标，究竟污染了多少报表？</a></li>
+<li><a href="#javaflink-spark">第十一幕：Java、Flink 与 Spark 的完整数仓工程</a></li>
+<li><a href="#_30">企业级交易数仓架构</a></li>
+<li><a href="#_32">第十二幕：面试官的十道终极审问</a></li>
+<li><a href="#_33">尾声：新的敌人——数据正确了，却无法实时查询</a></li>
+<li><a href="#olap-clickhousestarrocks">下一章：《OLAP 王座——ClickHouse、StarRocks 与亿级分析》</a></li>
+</ul>
+</div>
+</details></aside><main id="main" class="chapter-main"><div class="chapter-heading"><p class="eyebrow">CHAPTER 09 <span>/ 12 · 约 34 分钟</span></p><h1>数据仓库之城——从混乱日志到可信指标</h1><p class="topics">指标契约 · 数仓分层 · 维度建模 · CDC · 数据治理</p><div class="bridge">先遇见系统的问题，再理解技术为什么出现。</div></div><details class="mobile-toc"><summary>章节与本章目录</summary><nav aria-label="移动端章节"><a class="" href="chapter-01.html"><span>01</span>帝国崩溃之夜——当一万人同时敲响城门</a><a class="" href="chapter-02.html"><span>02</span>Redis 要塞——十万请求与最后一张优惠券</a><a class="" href="chapter-03.html"><span>03</span>亿级数据之灾——MySQL 巨城的极限</a><a class="" href="chapter-04.html"><span>04</span>分布式大陆——Hadoop 与 MapReduce 的诞生</a><a class="" href="chapter-05.html"><span>05</span>Spark 崛起——内存计算与 DAG 战争</a><a class="" href="chapter-06.html"><span>06</span>实时之河——Kafka 与 Flink 的崛起</a><a class="" href="chapter-07.html"><span>07</span>背压风暴——千万级实时系统的生死线</a><a class="" href="chapter-08.html"><span>08</span>千万级帝国——从零设计真正的高并发直播系统</a><a class="current" href="chapter-09.html" aria-current="page"><span>09</span>数据仓库之城——从混乱日志到可信指标</a><a class="" href="chapter-10.html"><span>10</span>OLAP 王座——ClickHouse、StarRocks 与百亿级分析战争</a><a class="" href="chapter-11.html"><span>11</span>资源之战——高并发与大数据的成本极限</a><a class="" href="chapter-12.html"><span>12</span>终极工程——从一台 Spring Boot 到十万 QPS 的生产战场</a></nav><div class="toc">
+<ul>
+<li><a href="#_1">第一幕：消失的两千七百万</a></li>
+<li><a href="#_2">第二幕：第一场审判——指标究竟是什么？</a></li>
+<li><a href="#_6">第三幕：四层数据仓库——从原始卷宗到帝国报告</a></li>
+<li><a href="#_7">数据仓库四层体系</a></li>
+<li><a href="#_8">第四幕：事实表与维度表——帝国必须知道每一笔交易发生了什么</a></li>
+<li><a href="#_13">第五幕：时光档案——用户换了城市，历史报表应该改变吗？</a></li>
+<li><a href="#cdc-mysql">第六幕：CDC 信使——MySQL 的每一次变化，如何传到数据仓库？</a></li>
+<li><a href="#etl-elt">第七幕：ETL 与 ELT——先加工再入库，还是先入库再加工？</a></li>
+<li><a href="#hdfsparqueticeberg">第八幕：湖仓王国——HDFS、Parquet、Iceberg 与计算引擎的分工</a></li>
+<li><a href="#_18">第九幕：两千七百万差异的真相</a></li>
+<li><a href="#_26">数据口径与重复事件模拟器</a></li>
+<li><a href="#_27">第十幕：数据血缘——一项错误指标，究竟污染了多少报表？</a></li>
+<li><a href="#javaflink-spark">第十一幕：Java、Flink 与 Spark 的完整数仓工程</a></li>
+<li><a href="#_30">企业级交易数仓架构</a></li>
+<li><a href="#_32">第十二幕：面试官的十道终极审问</a></li>
+<li><a href="#_33">尾声：新的敌人——数据正确了，却无法实时查询</a></li>
+<li><a href="#olap-clickhousestarrocks">下一章：《OLAP 王座——ClickHouse、StarRocks 与亿级分析》</a></li>
+</ul>
+</div>
+</details><article><blockquote>
+<p>阅读提示：指标先定义粒度、时间边界、去重键和退款规则。数仓分层是组织方法，不是所有系统必须采用的固定命名。代码是示例片段，历史重算需要幂等写入与时区一致。</p>
+</blockquote>
+<p>上一章，Spring 王国终于建立了千万级直播交易平台。Nginx 守卫入口，Netty 管理百万长连接，Redis 抵挡热点流量，Kafka 运输交易事件，Flink 持续计算，ClickHouse 为帝国提供实时分析。</p>
+<p>所有服务器都正常运行。所有监控指标都显示健康。</p>
+<p>然而，财政大臣呈上的两份财务报表，却差了整整两千七百万。</p>
+<p>这一次，没有宕机，没有超时，没有异常日志。</p>
+<p>数据帝国遭遇了比服务器崩溃更加危险的敌人：错误但看似合理的数据。</p>
+<h2 id="_1">第一幕：消失的两千七百万</h2>
+<p>数据大陆，凌晨两点。</p>
+<p>皇宫议事厅灯火通明。</p>
+<p>国王 Java 坐在王座上，脸色铁青。</p>
+<p>他的面前摆着三份报告。</p>
+<p><strong>昨日成交报表 · 虚构事故数据</strong></p>
+<table>
+<thead>
+<tr>
+<th>统计项</th>
+<th>金额</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MySQL 财务口径</td>
+<td>8.20 亿元</td>
+</tr>
+<tr>
+<td>Flink 实时口径</td>
+<td>8.47 亿元</td>
+</tr>
+<tr>
+<td>差异</td>
+<td>2,700 万元</td>
+</tr>
+</tbody>
+</table>
+<p>三份不同系统生成的数据，如果统计口径、事件处理和时间边界不同，就可能产生这种无法直接比较的结果。</p>
+<p>“为什么？”国王冷冷地问。</p>
+<p>MySQL 总督率先站起。</p>
+<p>“陛下，我这里保存的交易记录是完整的。”</p>
+<p>Kafka 将军立即反驳。</p>
+<p>“我这里的消息都正常送达了！”</p>
+<p>Flink 统帅皱眉。</p>
+<p>“我的 Checkpoint 持续成功，没有出现状态恢复异常。”</p>
+<p>ClickHouse 城主说道：</p>
+<p>“查询只用了几十毫秒，结果就是 8.47 亿。”</p>
+<p>国王怒道：</p>
+<p>“我不是问谁运行得快！”</p>
+<p>“我问的是，谁算错了！”</p>
+<p>所有人陷入沉默。</p>
+<p>首席架构师缓缓站起。</p>
+<p>“陛下，我想先问一个问题。”</p>
+<p>“什么问题？”</p>
+<p>“这三份报表中的‘成交金额’，究竟是什么意思？”</p>
+<p>国王愣住了。</p>
+<p>“成交金额还能有几个意思？”</p>
+<p>架构师从桌上拿起一张订单。</p>
+<p>“假设用户创建了一笔 100 元的订单。”</p>
+<p>“支付成功后，退款 30 元。”</p>
+<p>“这笔订单的成交金额是多少？”</p>
+<p>“100 元？”</p>
+<p>“如果我们统计的是支付成功时的累计支付金额，可以是 100 元。”</p>
+<p>“但如果统计的是某种退款后净支付口径，可能就是 70 元。”</p>
+<p>“如果订单先使用了 20 元优惠券，而商品原价是 120 元，又该怎么算？”</p>
+<p>国王沉默。</p>
+<p>架构师又问：</p>
+<p>“如果一张订单包含三件商品，金额分别是 40、30、30 元，我们按订单统计还是按商品统计？”</p>
+<p>“如果一笔支付跨越了午夜，我们按照下单日期、支付日期，还是结算日期归属？”</p>
+<p>“如果支付事件重复出现呢？”</p>
+<p>“如果退款在第二天才发生呢？”</p>
+<p>“如果历史数据被重新修正呢？”</p>
+<p>首席架构师终于说出了这场战争的真相。</p>
+<blockquote>
+<p>数据系统最大的危险之一，不是算不出来，而是每个系统都准确地计算了不同的东西。</p>
+</blockquote>
+<p><img alt="故事场景插图" src="https://images.openai.com/static-rsc-4/zi_WqMS5-fEkL2Bq3rkMQZLteGxKLdvZUhm9XzqsSRMI6ykJoEUUnXHOzb_aa3BE-d8NTYVI4Eali3am6owAoRWJWndswHYmYtyfhtrYIm0OAtsmNSZ9Uuobmx7TQMeUAiC2bIQ20ax2Mq87jWLvgVQiPARA2tQ6qk9LigDcTJw?purpose=inline" /></p>
+<p><em>图片来源：How to Master Business Budget Planning with AI</em></p>
+<p><a href="https://prometai.app/blog/how-to-master-business-budget-planning-with-ai?utm_source=chatgpt.com">prometai.app</a></p>
+<h2 id="_2">第二幕：第一场审判——指标究竟是什么？</h2>
+<p>首席架构师将财政官、交易官、运营官全部召集到大厅。</p>
+<p>他在黑板上写下：</p>
+<p>GMV、支付金额、退款金额、净支付金额。</p>
+<p>“今天，我们先不讨论 Flink，不讨论 Spark，也不讨论 Kafka。”</p>
+<p>“先把指标定义清楚。”</p>
+<h3 id="gmv">一、GMV 与实付金额不是天然同义词</h3>
+<p>架构师解释：</p>
+<p>“GMV 常用来描述一定业务范围内的交易总额，但不同企业可能采用不同定义。”</p>
+<p>“有的使用下单金额，有的使用支付成功金额，有的对取消、退款及优惠的处理不同。”</p>
+<p>“因此，我们不能仅凭 GMV 这个名字，就断定一条 SQL 一定正确。”</p>
+<p>国王点头。</p>
+<p>“那应该怎么办？”</p>
+<p>“建立指标契约。”</p>
+<p>例如，帝国决定定义一项指标：</p>
+<h3 id="_3">指标契约：成功支付金额</h3>
+<table>
+<thead>
+<tr>
+<th>指标编码</th>
+<th><code>paid_amount</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>统计对象</td>
+<td>成功支付事实</td>
+</tr>
+<tr>
+<td>时间维度</td>
+<td>业务支付成功时间</td>
+</tr>
+<tr>
+<td>金额单位</td>
+<td>人民币分</td>
+</tr>
+<tr>
+<td>去重标识</td>
+<td>唯一支付业务事件标识</td>
+</tr>
+<tr>
+<td>退款处理</td>
+<td>不从该指标中直接扣减，另设退款指标</td>
+</tr>
+<tr>
+<td>统计时区</td>
+<td>Asia/Shanghai</td>
+</tr>
+<tr>
+<td>数据修正</td>
+<td>允许迟到事件修正与重算</td>
+</tr>
+</tbody>
+</table>
+<p>这是本章设计的示例业务定义，不代表所有企业的财务或 GMV 口径。</p>
+<p>架构师继续说道：</p>
+<p>“如果要计算退款后净支付额，可以定义另一个指标。”</p>
+<p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>净支付额</mtext><mo>=</mo><mtext>成功支付额</mtext><mo>−</mo><mtext>成功退款额</mtext></mrow><annotation encoding="application/x-tex"> \text{净支付额}=\text{成功支付额}-\text{成功退款额} </annotation></semantics></math></span></p>
+<p>“但退款按退款发生日期归属，还是回溯冲减原支付日期，必须另外明确。”</p>
+<p>“这两个口径可能产生不同的每日趋势，即使长期总额一样。”</p>
+<h3 id="_4">二、为什么金额最好使用整数分？</h3>
+<p>一名工程师问：</p>
+<p>“我们直接用 double 保存金额，不行吗？”</p>
+<p>架构师回答：</p>
+<p>“Java 的 double 基于二进制浮点数，不能精确表示所有十进制小数。”</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="mf">0.1</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mf">0.2</span><span class="p">);</span>
+</code></pre></div>
+
+<p>可能得到：</p>
+<div class="codehilite"><pre><span></span><code>0.30000000000000004
+</code></pre></div>
+
+<p>“因此，对于精确金额运算，可以采用整数最小货币单位，或在 Java 中使用 BigDecimal，并明确精度与舍入规则。”</p>
+<p>“在数仓中，金额字段也需要使用适当的整数或定点数类型，避免反复浮点累加造成误差。”</p>
+<h3 id="_5">三、为什么要先定义指标，再建数据仓库？</h3>
+<p>国王问：</p>
+<p>“是不是先把所有数据都搬进仓库，再慢慢研究指标？”</p>
+<p>架构师摇头。</p>
+<p>“原始数据当然可以先保留。”</p>
+<p>“但如果业务要依赖这些指标做经营决策，就应该先明确统计契约。”</p>
+<p>“否则，后续每一层都会复制和传播错误理解。”</p>
+<p>这时，架构师在地图上标出一座巨大的新城。</p>
+<p>城门刻着四个字母：</p>
+<p>ODS、DWD、DWS、ADS。</p>
+<h2 id="_6">第三幕：四层数据仓库——从原始卷宗到帝国报告</h2>
+<p>数据仓库之城位于数据大陆中央。</p>
+<p>它不是一间巨大的仓库。</p>
+<p>而是一套组织数据、加工数据、统一语义和服务分析需求的体系。</p>
+<p>架构师带国王走进第一层。</p>
+<h3 id="ods">一、ODS：原始数据的接待大厅</h3>
+<p>“ODS，Operational Data Store。”</p>
+<p>“在我们采用的分层规范里，它主要承担原始业务数据的接入和留存。”</p>
+<p>“例如订单表、支付表、退款表、用户表，以及 Kafka 事件。”</p>
+<p>国王问：</p>
+<p>“为什么不直接在 ODS 里把所有错误数据都清洗掉？”</p>
+<p>架构师回答：</p>
+<p>“因为原始数据本身具有审计和追溯价值。”</p>
+<p>“如果过早丢弃信息，后来发现处理逻辑有误，就可能无法重新构建正确结果。”</p>
+<p>ODS 中可能记录：</p>
+<div class="codehilite"><pre><span></span><code>order_id
+payment_id
+payment_status
+amount_cent
+source_updated_at
+ingest_time
+source_operation
+source_position
+</code></pre></div>
+
+<p>“其中源变更位置、采集时间和操作类型，可以帮助我们理解数据从哪里来、何时被采集，以及是否发生过更新或删除。”</p>
+<p>“当然，保留原始数据也必须符合隐私、权限和数据生命周期要求。”</p>
+<h3 id="dwd">二、DWD：清洗后的明细事实</h3>
+<p>架构师带国王进入第二层。</p>
+<p>这里的档案官正在做四件事。</p>
+<p>第一，规范字段和类型。</p>
+<p>第二，识别重复数据。</p>
+<p>第三，处理业务事件语义。</p>
+<p>第四，将原始记录转换为具有明确粒度的事实数据。</p>
+<p>“DWD 通常称为 Data Warehouse Detail。”</p>
+<p>“它不是简单复制一遍 ODS。”</p>
+<p>“我们要在这里确定事实粒度和关键业务规则。”</p>
+<p>例如支付事实表：</p>
+<div class="codehilite"><pre><span></span><code>dwd_payment_success
+
+payment_id
+order_id
+user_id
+room_id
+paid_amount_cent
+paid_at
+payment_channel
+</code></pre></div>
+
+<p>“每一行到底表示一笔支付成功事实，还是一次支付状态变更事件，需要从一开始就定义清楚。”</p>
+<p>“否则在 DWS 做 SUM 时，很容易重复计算。”</p>
+<h3 id="dws">三、DWS：汇总与公共指标</h3>
+<p>接下来是第三层。</p>
+<p>DWS，Data Warehouse Summary 或 Service 等命名在不同企业中存在差异，这里采用汇总服务层的含义。</p>
+<p>“陛下，DWD 保存明细事实，而 DWS 负责把重复使用的汇总逻辑沉淀下来。”</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>dws_room_payment_1d
+
+stat_date
+room_id
+paid_amount_cent
+payment_count
+paying_user_count
+</code></pre></div>
+
+<p>“这里统计某直播间每天的成功支付金额、支付次数与去重支付用户数。”</p>
+<p>“但要注意，支付金额可以直接加总，而跨天的独立支付用户数不一定能直接相加。”</p>
+<p>“因为同一个用户可能连续两天支付。”</p>
+<h3 id="ads">四、ADS：面向业务的应用报表</h3>
+<p>最后，架构师打开了第四层大门。</p>
+<p>ADS，Application Data Service。</p>
+<p>这里的结果直接服务运营、财务、BI 看板和业务决策。</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>ads_live_room_rank_today
+
+rank
+room_id
+room_name
+paid_amount_cent
+conversion_rate
+</code></pre></div>
+
+<p>“这一层更接近具体业务需求。”</p>
+<p>“直播排行榜、经营驾驶舱、活动复盘，都可以构建相应的数据应用结果。”</p>
+<h2 id="_7">数据仓库四层体系</h2>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>角色</th>
+<th>主要内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ODS</td>
+<td>原始接入</td>
+<td>业务数据、变更日志、原始事件</td>
+</tr>
+<tr>
+<td>DWD</td>
+<td>明细事实</td>
+<td>清洗、去重、标准化、明确粒度</td>
+</tr>
+<tr>
+<td>DWS</td>
+<td>公共汇总</td>
+<td>按主题汇总，沉淀共享指标</td>
+</tr>
+<tr>
+<td>ADS</td>
+<td>应用服务</td>
+<td>面向 BI、看板与业务报表</td>
+</tr>
+</tbody>
+</table>
+<p>数据由接入走向加工与服务，各层保留清晰的职责与可追溯关系。</p>
+<p>国王凝视着这座四层城市。</p>
+<p>“我明白了。”</p>
+<p>“原始数据进入 ODS。”</p>
+<p>“DWD 将数据整理成可信的业务明细。”</p>
+<p>“DWS 计算共享的汇总结果。”</p>
+<p>“ADS 为具体应用提供数据。”</p>
+<p>架构师点头。</p>
+<p>“这是很好的入门理解。”</p>
+<p>“但不能认为数据经过四层就天然正确。”</p>
+<p>“每一层都必须有明确的输入、输出、质量检查与责任人。”</p>
+<h2 id="_8">第四幕：事实表与维度表——帝国必须知道每一笔交易发生了什么</h2>
+<p>当国王走进 DWD 大厅时，发现档案官正在争吵。</p>
+<p>一个人说：</p>
+<p>“订单表应该包含用户名！”</p>
+<p>另一个人说：</p>
+<p>“还应该包含用户城市、商品类别、主播等级！”</p>
+<p>第三个人说：</p>
+<p>“干脆把所有字段都放到一张表里！”</p>
+<p>架构师摇了摇头。</p>
+<p>“诸位，我们需要先分清事实与维度。”</p>
+<h3 id="_9">一、事实表：记录发生的业务</h3>
+<p>假设用户张三在直播间购买了一件商品。</p>
+<p>支付 199 元。</p>
+<p>这是一件业务事实。</p>
+<p>我们可以记录：</p>
+<div class="codehilite"><pre><span></span><code>payment_id = 50001
+order_id = 10001
+user_id = 20001
+product_id = 30001
+room_id = 40001
+amount_cent = 19900
+paid_at = 2027-01-01 20:05:00
+</code></pre></div>
+
+<p>“事实表通常记录业务过程中的事件、度量或状态。”</p>
+<p>“例如支付成功事实、订单明细事实、商品曝光事实。”</p>
+<h3 id="_10">二、维度表：描述事实发生的背景</h3>
+<p>国王问：</p>
+<p>“那么用户所在城市、商品分类、主播等级呢？”</p>
+<p>架构师回答：</p>
+<p>“这些可以属于维度属性。”</p>
+<p>例如：</p>
+<div class="codehilite"><pre><span></span><code>dim_user
+  user_id
+  region
+  register_channel
+
+dim_product
+  product_id
+  category
+  brand
+
+dim_room
+  room_id
+  anchor_id
+  room_category
+</code></pre></div>
+
+<p>“维度使我们能够回答‘按什么角度分析’。”</p>
+<p>“事实则告诉我们‘发生了什么、产生了多少’。”</p>
+<h3 id="grain">三、粒度 Grain：决定一行代表什么</h3>
+<p>架构师在黑板上写下一个词。</p>
+<p>Grain，事实粒度。</p>
+<p>“陛下，设计事实表的第一步，不应该是选字段。”</p>
+<p>“而是明确一行代表什么。”</p>
+<p>假设一个订单购买了三件商品：</p>
+<table>
+<thead>
+<tr>
+<th>订单</th>
+<th>商品</th>
+<th>金额</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1001</td>
+<td>A</td>
+<td>¥50</td>
+</tr>
+<tr>
+<td>1001</td>
+<td>B</td>
+<td>¥30</td>
+</tr>
+<tr>
+<td>1001</td>
+<td>C</td>
+<td>¥20</td>
+</tr>
+</tbody>
+</table>
+<p>如果事实表采用订单商品行粒度，那么这三行代表三条订单明细。</p>
+<p>但如果再把一张订单级优惠记录直接 Join 到三条明细，可能造成优惠金额被重复加总。</p>
+<p>国王猛然站起。</p>
+<p>“这不是又算出假数据了吗？”</p>
+<p>“正是。”</p>
+<p>“多表 Join 时，如果两边粒度不匹配，可能产生行数膨胀。”</p>
+<p>“在统计之前，要确认连接关系是一对一、一对多还是多对多。”</p>
+<h3 id="_11">四、星型模型与雪花模型</h3>
+<h3 id="_12">星型模型：事实表位于中心</h3>
+<table>
+<thead>
+<tr>
+<th>中心事实表</th>
+<th>关联维度</th>
+<th>描述内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>支付事实</td>
+<td>用户维度</td>
+<td>地区、注册渠道</td>
+</tr>
+<tr>
+<td>支付事实</td>
+<td>商品维度</td>
+<td>品类、品牌</td>
+</tr>
+<tr>
+<td>支付事实</td>
+<td>直播间维度</td>
+<td>主播、房间类别</td>
+</tr>
+</tbody>
+</table>
+<p>逻辑关系：事实表通过维度键连接各维度。使用历史维度版本时，代理键与有效时间必须配套设计。</p>
+<p>“星型模型通常把事实表放在中心，周围直接连接维度表。”</p>
+<p>“雪花模型则进一步将部分维度规范化，形成更复杂的维度关联结构。”</p>
+<p>星型模型往往更容易理解和查询，但可能存在维度属性冗余；雪花模型可能减少某些冗余，却增加 Join 和查询复杂性。</p>
+<p>Kimball 维度建模体系对事实粒度、维度以及缓慢变化维度都有系统定义。</p>
+<h2 id="_13">第五幕：时光档案——用户换了城市，历史报表应该改变吗？</h2>
+<p>国王以为事实表与维度表已经解决问题。</p>
+<p>然而，历史档案管理员拿出一个案例。</p>
+<p>“陛下，张三去年住在北京，今年搬到了上海。”</p>
+<p>“如果我们分析去年不同城市的消费额，这笔订单应该算到北京还是上海？”</p>
+<p>国王脱口而出：</p>
+<p>“当然是北京！”</p>
+<p>管理员问：</p>
+<p>“可是 dim_user 里的城市已经更新成上海了。”</p>
+<p>国王皱眉。</p>
+<p>“那历史数据岂不是改变了？”</p>
+<p>架构师回答：</p>
+<p>“您终于遇到了 SCD。”</p>
+<p>SCD：Slowly Changing Dimension，缓慢变化维度。</p>
+<h3 id="type-1">一、Type 1：直接覆盖历史</h3>
+<p>旧记录：</p>
+<div class="codehilite"><pre><span></span><code>user_id = 1001
+city = 北京
+</code></pre></div>
+
+<p>用户搬家后：</p>
+<div class="codehilite"><pre><span></span><code>user_id = 1001
+city = 上海
+</code></pre></div>
+
+<p>“这种策略保留最新属性，历史属性被覆盖。”</p>
+<p>“它适合不需要保留历史版本，或者需要纠正错误属性的场景。”</p>
+<h3 id="type-2">二、Type 2：增加历史版本</h3>
+<p>“如果需要保留用户所属城市的历史，我们可以新建维度版本。”</p>
+<table>
+<thead>
+<tr>
+<th>代理键</th>
+<th>用户 ID</th>
+<th>城市</th>
+<th>生效时间</th>
+<th>失效时间</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>501</td>
+<td>1001</td>
+<td>北京</td>
+<td>2025-01-01</td>
+<td>2026-06-01</td>
+</tr>
+<tr>
+<td>782</td>
+<td>1001</td>
+<td>上海</td>
+<td>2026-06-01</td>
+<td>9999-12-31</td>
+</tr>
+</tbody>
+</table>
+<p>“当事实发生在 2025 年，就可以关联当时生效的北京版本。”</p>
+<p>“当事实发生在 2027 年，就可以关联上海版本。”</p>
+<p>“其中代理键用于区分同一业务用户的不同历史版本。”</p>
+<p>这就是 SCD Type 2 的核心思想：变化时增加新行，而不是覆盖旧行。</p>
+<h3 id="type-2_1">三、为什么 Type 2 也不简单？</h3>
+<p>架构师继续问：</p>
+<p>“如果用户的地址变更事件晚到了三天呢？”</p>
+<p>“如果我们重新修订历史生效时间呢？”</p>
+<p>“如果同一条事件重复同步呢？”</p>
+<p>国王沉默。</p>
+<p>“这些都需要通过版本区间、业务时间、变更顺序及幂等逻辑处理。”</p>
+<p>“不能简单地对维度表执行 INSERT，就认为 SCD2 已经实现正确。”</p>
+<h2 id="cdc-mysql">第六幕：CDC 信使——MySQL 的每一次变化，如何传到数据仓库？</h2>
+<p>这一天，Kafka 将军来到皇宫。</p>
+<p>“陛下，我们需要把 MySQL 的支付事实同步到数据仓库。”</p>
+<p>国王说道：</p>
+<p>“很简单，每隔一分钟执行一次 SQL。”</p>
+<div class="codehilite"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="o">*</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">payment</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">updated_at</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="p">:</span><span class="n">last_sync_time</span><span class="p">;</span>
+</code></pre></div>
+
+<p>架构师没有立刻否定。</p>
+<p>“这种增量轮询，在一些简单场景下确实能使用。”</p>
+<p>“但它存在几个常见难点。”</p>
+<p>“如果一条记录删除了，怎么发现？”</p>
+<p>“如果更新时间精度不足，边界上的多条记录怎么处理？”</p>
+<p>“如果事务还没提交，或者数据的更新顺序与时间字段不一致，怎么办？”</p>
+<p>“如果数据库每次都要扫描大量记录，又该如何控制压力？”</p>
+<p>国王问：</p>
+<p>“还有更好的方式吗？”</p>
+<p>“可以考虑 CDC。”</p>
+<h3 id="cdcchange-data-capture">一、CDC：Change Data Capture</h3>
+<p>CDC 是变更数据捕获。</p>
+<p>“它不是反复读取整个表，而是捕获数据源中发生的插入、更新和删除等变更。”</p>
+<p>在常见的 MySQL 日志式 CDC 中，可以利用 Binlog 等机制获取数据库变更。</p>
+<div class="codehilite"><pre><span></span><code>MySQL
+  ↓
+Binlog
+  ↓
+CDC Connector
+  ↓
+Kafka
+  ↓
+Flink / Spark / 数仓
+</code></pre></div>
+
+<h3 id="_14">二、为什么需要快照加增量？</h3>
+<p>国王问：</p>
+<p>“如果一张表已经有十亿条历史记录，CDC 开始运行后，难道只能拿到新变化？”</p>
+<p>架构师回答：</p>
+<p>“我们通常还需要初始化已有数据。”</p>
+<p>“一类典型方案是先读取历史快照，并在过程中协调捕获后续增量变化。”</p>
+<p>“这样能够构建初始表状态，再继续消费持续发生的更新。”</p>
+<p>“但快照与增量之间如何衔接，必须由连接器的具体一致性机制保证。”</p>
+<p>“不能随便先执行 <code>SELECT *</code>，再去读取当前 Binlog，否则两者之间可能出现数据缺口或重复。”</p>
+<h3 id="_15">三、删除事件与撤回语义</h3>
+<p>架构师展示：</p>
+<div class="codehilite"><pre><span></span><code>INSERT：新增支付记录
+UPDATE：支付状态改变
+DELETE：删除一条业务记录
+</code></pre></div>
+
+<p>“下游必须理解这些消息代表的是数据库行变化，还是已经解释好的业务事件。”</p>
+<p>“比如支付表从 <code>UNPAID</code> 更新为 <code>PAID</code>，不代表每次更新这行记录都应该新增一次成交金额。”</p>
+<p>“订单状态后续改变、补充备注，也不能再次加钱。”</p>
+<h3 id="cdc-outbox">四、CDC 与 Outbox 的区别</h3>
+<p>国王问：</p>
+<p>“那我们之前设计的 Outbox，是不是没必要了？”</p>
+<p>架构师回答：</p>
+<p>“不是。”</p>
+<p>“CDC 说明如何捕获数据变化。”</p>
+<p>“Outbox 说明如何在业务数据库事务中可靠记录待发布的业务事件。”</p>
+<p>“我们完全可以通过 CDC 将 Outbox 事件传递到 Kafka。”</p>
+<p>“这样既利用数据库本地事务保证业务状态与事件记录同时提交，又利用变更捕获完成异步发布。”</p>
+<p>“但消息重复、Schema 变更、历史回放和下游幂等仍需设计。”</p>
+<h2 id="etl-elt">第七幕：ETL 与 ELT——先加工再入库，还是先入库再加工？</h2>
+<p>数据仓库已经建成。</p>
+<p>但帝国工程师分成了两个派系。</p>
+<p>一个派系主张：</p>
+<p>“数据必须先清洗，再进入分析仓库！”</p>
+<p>另一个派系反驳：</p>
+<p>“应该先保存数据，再利用数仓的计算能力进行转换！”</p>
+<p>国王被吵得头疼。</p>
+<p>架构师说道：</p>
+<p>“这就是 ETL 与 ELT 的区别。”</p>
+<h3 id="etl">ETL</h3>
+<p>Extract → Transform → Load。</p>
+<p>抽取、转换、加载。</p>
+<p>“数据从源系统抽取后，先经过转换处理，再加载到目标分析系统。”</p>
+<h3 id="elt">ELT</h3>
+<p>Extract → Load → Transform。</p>
+<p>抽取、加载、转换。</p>
+<p>“数据先进入具备存储与计算能力的目标平台，再在平台内部完成转换。”</p>
+<table>
+<thead>
+<tr>
+<th>对比</th>
+<th>ETL</th>
+<th>ELT</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>转换位置</td>
+<td>通常在加载目标系统之前</td>
+<td>通常在目标数据平台内部</td>
+</tr>
+<tr>
+<td>原始数据保留</td>
+<td>取决于架构设计</td>
+<td>常结合原始数据留存</td>
+</tr>
+<tr>
+<td>常见实践</td>
+<td>外部数据集成和预处理</td>
+<td>云数仓、湖仓内 SQL 转换</td>
+</tr>
+<tr>
+<td>选择依据</td>
+<td>数据安全、处理能力、成本、时延、治理要求</td>
+<td>同左</td>
+</tr>
+</tbody>
+</table>
+<p>“陛下，不要把 ETL 理解成旧技术、ELT 理解成必然先进的技术。”</p>
+<p>“它们是不同的数据处理安排。”</p>
+<p>“有些敏感数据在进入目标平台前，就需要完成脱敏和校验；有些大规模转换更适合利用目标平台的分布式计算能力。”</p>
+<h2 id="hdfsparqueticeberg">第八幕：湖仓王国——HDFS、Parquet、Iceberg 与计算引擎的分工</h2>
+<p>深夜。</p>
+<p>国王走进最深处的仓库。</p>
+<p>管理员告诉他：</p>
+<p>“陛下，除了结构化订单数据，我们还有点击日志、图片元数据、模型训练样本、历史快照以及各种半结构化事件。”</p>
+<p>“难道所有数据都应该放进 ClickHouse？”</p>
+<p>架构师摇头。</p>
+<p>“我们需要区分存储层、文件格式、表格式和计算引擎。”</p>
+<h3 id="_16">一、数据湖</h3>
+<p>数据湖通常将大量不同类型的数据保存在能够扩展的存储基础设施上。</p>
+<p>例如 HDFS 或对象存储。</p>
+<p>“它可以存放原始日志、Parquet 文件、训练数据以及其他数据资产。”</p>
+<p>“但如果缺少表管理、权限、元数据和质量治理，数据湖也可能变成难以理解的数据沼泽。”</p>
+<h3 id="parquet">二、Parquet 是什么？</h3>
+<p>“Parquet 是面向分析任务的列式文件格式。”</p>
+<p>“它支持列裁剪、压缩，以及结合数据统计信息优化部分读取。”</p>
+<p>“但单靠一堆 Parquet 文件，不能自动提供完整的事务表管理能力。”</p>
+<h3 id="iceberg">三、Iceberg 又是什么？</h3>
+<p>架构师在黑板上写下：</p>
+<p>Apache Iceberg：面向大型分析数据集的开放表格式。</p>
+<p>“它不是替代 Spark 的计算引擎。”</p>
+<p>“也不是一个与对象存储完全相同层级的存储服务。”</p>
+<p>“Iceberg 通过表元数据和快照等机制管理底层数据文件，使多个兼容的计算引擎能够以表的方式访问分析数据。”</p>
+<h3 id="_17">湖仓分层架构</h3>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>示例</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>计算引擎</td>
+<td>Spark / Flink / Trino</td>
+<td>读取、计算、写入</td>
+</tr>
+<tr>
+<td>表格式与元数据</td>
+<td>Iceberg</td>
+<td>表快照、Schema、分区元数据</td>
+</tr>
+<tr>
+<td>文件格式</td>
+<td>Parquet</td>
+<td>列式编码与文件组织</td>
+</tr>
+<tr>
+<td>存储介质</td>
+<td>对象存储 / HDFS</td>
+<td>保存数据文件与相关元数据</td>
+</tr>
+</tbody>
+</table>
+<p>Iceberg 支持 Schema 与分区演进、快照查询等能力。计算引擎、表格式、文件格式与存储介质属于不同层次。</p>
+<h3 id="time-travel">四、Time Travel：回到昨天的数据状态</h3>
+<p>国王问：</p>
+<p>“如果数据工程师错误地覆盖了一张表，我们能恢复吗？”</p>
+<p>架构师回答：</p>
+<p>“如果采用了支持快照的表格式，且目标快照及相关文件仍然可用，就可能通过快照查询或回滚机制恢复。”</p>
+<p>“这也是 Time Travel 的价值。”</p>
+<p>“但不能将它等同于无限期备份。”</p>
+<p>“历史快照与数据文件可能受到保留、清理和生命周期策略影响。”</p>
+<p>“因此，关键数据仍然需要专门的备份与恢复设计。”</p>
+<h2 id="_18">第九幕：两千七百万差异的真相</h2>
+<p>经过三天调查，架构师终于将所有证据带回皇宫。</p>
+<p>“陛下，我们找到了问题。”</p>
+<p>国王猛然起身。</p>
+<p>“是谁算错了？”</p>
+<p>“不是一个人。”</p>
+<p>“是四个问题叠加。”</p>
+<h3 id="_19">第一宗：重复支付事件</h3>
+<p>一部分支付成功消息重复投递。</p>
+<p>Flink 的某条统计链路直接执行金额累加，没有完成业务事件级去重。</p>
+<p>结果：重复增加了金额。</p>
+<h3 id="_20">第二宗：退款口径不一致</h3>
+<p>MySQL 报表已经按某种净支付口径扣减退款。</p>
+<p>而 Flink 大屏展示的是累计成功支付金额。</p>
+<p>“这两项指标根本不是同一件事。”</p>
+<h3 id="_21">第三宗：时间边界错误</h3>
+<p>一部分事件发生在北京时间凌晨，但被使用 UTC 自然日进行分组。</p>
+<p>因此，某些订单被归到不同日期。</p>
+<h3 id="_22">第四宗：订单行与商品行重复关联</h3>
+<p>一张订单有多件商品。</p>
+<p>某个统计任务将订单级金额直接 Join 到商品明细行，再对订单金额求和。</p>
+<p>于是，一笔订单的金额被重复累计。</p>
+<p>国王闭上眼睛。</p>
+<p>“所以 Kafka 没坏。”</p>
+<p>“Flink 也没有明显宕机。”</p>
+<p>“ClickHouse 只是很快地返回了错误口径的数据。”</p>
+<p>架构师点头。</p>
+<p>“这就是为什么可用性、性能和数据正确性必须分别验证。”</p>
+<h3 id="_23">一、怎么进行对账？</h3>
+<p>架构师制定了三层对账方案。</p>
+<p>第一层：数量对账。</p>
+<p>源系统有多少笔支付成功事实？</p>
+<p>DWD 有多少笔去重后的支付事实？</p>
+<p>不同阶段数量差异来自哪里？</p>
+<p>第二层：金额对账。</p>
+<p>按统一统计口径、时间范围、币种和金额单位，比较源数据与派生结果。</p>
+<p>第三层：明细差异定位。</p>
+<p>如果汇总金额不一致，进一步根据支付 ID 找到缺失、重复或金额不一致的记录。</p>
+<p>示意 SQL：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">SELECT</span>
+<span class="w">    </span><span class="n">payment_id</span><span class="p">,</span>
+<span class="w">    </span><span class="k">COUNT</span><span class="p">(</span><span class="o">*</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">record_count</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">dwd_payment_success</span>
+<span class="k">GROUP</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">payment_id</span>
+<span class="k">HAVING</span><span class="w"> </span><span class="k">COUNT</span><span class="p">(</span><span class="o">*</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+</code></pre></div>
+
+<p>“这可以发现部分重复记录，但不能独立证明整体数据正确。”</p>
+<p>“因为缺失、错误状态、错误金额和错误时间，同样会导致结果不一致。”</p>
+<h3 id="_24">二、如何防止对账任务自身出错？</h3>
+<p>架构师补充：</p>
+<p>“我们需要保证双方使用的是可比较的数据版本或明确的统计截止点。”</p>
+<p>“否则一边统计到 20:00，另一边只处理到 19:58，差异只是正常的异步延迟。”</p>
+<p>“此外，金额必须采用一致的精度、币种、舍入方式和退款归属规则。”</p>
+<h3 id="_25">交互实验：一次重复事件如何让报表失真？</h3>
+<h2 id="_26">数据口径与重复事件模拟器</h2>
+<div class="lab" data-lab="reconcile"></div>
+
+<p>国王看着模拟结果，久久没有说话。</p>
+<p>“只改变几条处理规则，报表就会完全不同。”</p>
+<p>“正是如此。”</p>
+<p>“而在一亿条数据的规模下，这种错误可能被放大无数倍。”</p>
+<h2 id="_27">第十幕：数据血缘——一项错误指标，究竟污染了多少报表？</h2>
+<p>虽然找到了错误，帝国又面临新的问题。</p>
+<p>运营总监问：</p>
+<p>“我们已经修复了 DWD 的支付数据。”</p>
+<p>“但不知道哪些下游报表使用了这个字段。”</p>
+<p>“也不知道要重新计算多少张表。”</p>
+<p>架构师拿出一张关系图。</p>
+<p>“这就是为什么我们需要数据血缘（Data Lineage）。”</p>
+<div class="codehilite"><pre><span></span><code>MySQL payment
+      ↓
+ODS payment_cdc
+      ↓
+DWD payment_success
+      ↓
+DWS room_payment_day
+      ├── ADS live_gmv_dashboard
+      ├── ADS room_ranking
+      └── ADS revenue_report
+</code></pre></div>
+
+<p>“数据血缘用于描述数据从哪里来、经过了哪些转换，以及流向哪些下游对象。”</p>
+<p>“它可以帮助我们做影响分析、故障排查、数据治理与回溯。”</p>
+<h3 id="_28">一、数据质量的几个维度</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>需要回答的问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>完整性</td>
+<td>数据是否缺失？</td>
+</tr>
+<tr>
+<td>唯一性</td>
+<td>是否有不允许的重复记录？</td>
+</tr>
+<tr>
+<td>有效性</td>
+<td>字段是否满足业务规则？</td>
+</tr>
+<tr>
+<td>一致性</td>
+<td>不同系统的同口径数据是否一致？</td>
+</tr>
+<tr>
+<td>及时性</td>
+<td>数据是否在约定时间内到达？</td>
+</tr>
+<tr>
+<td>准确性</td>
+<td>数据是否正确反映真实业务？</td>
+</tr>
+</tbody>
+</table>
+<p>架构师强调：</p>
+<p>“准确性往往最难证明。”</p>
+<p>“因为格式正确、字段非空、主键唯一，并不代表支付金额就一定正确。”</p>
+<h3 id="_29">二、质量规则示例</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1">-- 检查关键业务字段缺失</span>
+<span class="k">SELECT</span><span class="w"> </span><span class="k">COUNT</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">dwd_payment_success</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">payment_id</span><span class="w"> </span><span class="k">IS</span><span class="w"> </span><span class="k">NULL</span>
+<span class="w">   </span><span class="k">OR</span><span class="w"> </span><span class="n">paid_at</span><span class="w"> </span><span class="k">IS</span><span class="w"> </span><span class="k">NULL</span>
+<span class="w">   </span><span class="k">OR</span><span class="w"> </span><span class="n">paid_amount_cent</span><span class="w"> </span><span class="k">IS</span><span class="w"> </span><span class="k">NULL</span><span class="p">;</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code><span class="c1">-- 检查异常支付金额</span>
+<span class="k">SELECT</span><span class="w"> </span><span class="k">COUNT</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">dwd_payment_success</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">paid_amount_cent</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+</code></pre></div>
+
+<p>“第二条规则是假设我们的成功支付事实不允许非正金额。”</p>
+<p>“如果业务允许零元支付，就应该修改规则。”</p>
+<p>“数据质量约束必须来源于真实业务定义，而不是无条件照搬模板。”</p>
+<h2 id="javaflink-spark">第十一幕：Java、Flink 与 Spark 的完整数仓工程</h2>
+<p>架构师终于展示了整个数据仓库的施工图。</p>
+<p>“陛下，今天我们把之前学过的所有技术连接起来。”</p>
+<h2 id="_30">企业级交易数仓架构</h2>
+<table>
+<thead>
+<tr>
+<th>链路</th>
+<th>数据路径</th>
+<th>目标</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>权威事实接入</td>
+<td>Spring Boot → MySQL → Outbox 发布 / CDC → Kafka</td>
+<td>捕获订单、支付、退款事实</td>
+</tr>
+<tr>
+<td>实时加工</td>
+<td>Kafka → Flink → Redis / ClickHouse</td>
+<td>清洗、去重、低延迟指标</td>
+</tr>
+<tr>
+<td>历史加工</td>
+<td>原始数据归档 → Iceberg / Parquet ↔ Spark</td>
+<td>ODS / DWD / DWS 历史存储、回溯与重算</td>
+</tr>
+<tr>
+<td>服务与治理</td>
+<td>加工结果 → ADS / BI / 报表服务</td>
+<td>统一口径、质量校验与对账</td>
+</tr>
+</tbody>
+</table>
+<p>实时加工与历史加工是两条配合的路径，不是将所有组件串成单条同步调用链。Outbox 事件与原始 CDC 的语义也需区分。</p>
+<h3 id="flink">一、用 Flink 构建实时明细与指标</h3>
+<p>Flink 持续消费 Kafka 中可信的支付业务事件。</p>
+<p>先完成事件解析和必要的业务去重。</p>
+<p>再按事件时间生成支付明细或窗口汇总。</p>
+<p>输出到支持相应写入语义的目标系统。</p>
+<p>“如果我们的 Sink 只是普通的非事务写入，就需要结合业务唯一键、版本字段或补偿重算机制处理重试。”</p>
+<p>“状态一致性与外部数据最终正确是两个不同层次的要求。”</p>
+<h3 id="spark">二、用 Spark 重算历史结果</h3>
+<p>假设昨天的实时统计发生了错误。</p>
+<p>我们仍然保留着完整的历史支付事实。</p>
+<p>架构师写出：</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">pyspark.sql</span> <span class="kn">import</span> <span class="n">functions</span> <span class="k">as</span> <span class="n">F</span>
+
+<span class="c1"># spark 为已初始化的 SparkSession；统一设置业务时区。</span>
+<span class="n">spark</span><span class="o">.</span><span class="n">conf</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;spark.sql.session.timeZone&quot;</span><span class="p">,</span> <span class="s2">&quot;Asia/Shanghai&quot;</span><span class="p">)</span>
+<span class="n">payments</span> <span class="o">=</span> <span class="n">spark</span><span class="o">.</span><span class="n">read</span><span class="o">.</span><span class="n">parquet</span><span class="p">(</span><span class="s2">&quot;/warehouse/dwd/payment_success&quot;</span><span class="p">)</span>
+<span class="n">daily</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">payments</span>
+    <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">&quot;paid_at&quot;</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="s2">&quot;2027-01-01&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">&quot;paid_at&quot;</span><span class="p">)</span> <span class="o">&lt;</span> <span class="s2">&quot;2027-01-02&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">groupBy</span><span class="p">(</span><span class="s2">&quot;room_id&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="s2">&quot;paid_amount_cent&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">&quot;paid_amount_cent&quot;</span><span class="p">))</span>
+<span class="p">)</span>
+<span class="n">daily</span><span class="o">.</span><span class="n">write</span><span class="o">.</span><span class="n">mode</span><span class="p">(</span><span class="s2">&quot;overwrite&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">parquet</span><span class="p">(</span><span class="s2">&quot;/warehouse/rebuild/2027-01-01&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<p>“这段代码只是展示批量汇总思路。”</p>
+<p>“实际工程必须确认时间字段的类型与时区、DWD 已经正确去重，并使用安全的重算发布机制，避免覆盖生产读者正在访问的数据。”</p>
+<p>“例如，可以先写入隔离版本，完成质量验证，再切换正式结果。”</p>
+<h3 id="_31">三、实时与离线如何统一口径？</h3>
+<p>国王问：</p>
+<p>“既然 Flink 和 Spark 是不同计算引擎，它们怎么保证统计一致？”</p>
+<p>架构师回答：</p>
+<p>“不能只靠两个团队各自写一份看起来相同的 SQL。”</p>
+<p>“更可靠的方式，是统一指标定义、数据契约、时间归属、去重规则和测试数据集。”</p>
+<p>“还应定期比较同一批次、同一截止点的数据。”</p>
+<p>“如果实时与离线结果不一致，要能够定位到具体的业务事件。”</p>
+<h2 id="_32">第十二幕：面试官的十道终极审问</h2>
+<div class="quiz" data-quiz="9"></div>
+
+<h2 id="_33">尾声：新的敌人——数据正确了，却无法实时查询</h2>
+<p>一个月后。</p>
+<p>Spring 王国的财务报表终于完成了统一。</p>
+<p>实时与离线系统能够按照同一口径进行对账。</p>
+<p>数据血缘使每条指标的来源更加清晰。</p>
+<p>历史数据也能进行回溯与重算。</p>
+<p>国王 Java 十分满意。</p>
+<p>“我们终于让数据可信了。”</p>
+<p>架构师点头。</p>
+<p>“是的，陛下。”</p>
+<p>“但现在，运营总监提出了一项新的要求。”</p>
+<p>“什么要求？”</p>
+<p>“他希望在一秒内查询过去三年所有直播间的数据。”</p>
+<p>“可以随时按照主播、地区、商品类别、渠道、日期进行任意组合筛选。”</p>
+<p>“还要支持排行榜、去重用户数、漏斗分析和留存分析。”</p>
+<p>国王问：</p>
+<p>“ClickHouse 不是已经能够做大数据分析了吗？”</p>
+<p>“是的。”</p>
+<p>“但如果查询没有合适的排序键和数据组织方式，如果频繁扫描大量不需要的数据，如果聚合设计不合理，依然可能出现很高的查询成本。”</p>
+<p>“而且我们还需要研究实时更新与分析查询之间的权衡。”</p>
+<p>远方，一座由无数列式石碑组成的巨大城市缓缓升起。</p>
+<p>城门上刻着：</p>
+<p>OLAP。</p>
+<p>架构师说道：</p>
+<p>“下一场战争，不再只是如何存储海量数据。”</p>
+<p>“而是如何让数十亿、数百亿条数据在复杂分析中仍然能够被高效访问。”</p>
+<h2 id="olap-clickhousestarrocks">下一章：《OLAP 王座——ClickHouse、StarRocks 与亿级分析》</h2>
+<p>第十章将继续以完整小说方式深入讲解：</p>
+<ol>
+<li>OLTP 与 OLAP 的本质差异：为什么两种工作负载需要不同的数据组织。</li>
+<li>列式存储与向量化执行：为什么只读取需要的列能够减少开销。</li>
+<li>ClickHouse MergeTree：排序键、Primary Key、Partition、Part 和后台 Merge 的原理。</li>
+<li>数据跳过索引与分区裁剪：为什么分析查询仍然需要合理的数据布局。</li>
+<li>精确去重与近似去重：<code>COUNT(DISTINCT)</code>、Bitmap、HyperLogLog。</li>
+<li>物化视图与预聚合：空间换时间的代价与数据更新难题。</li>
+<li>实时 OLAP 架构：ClickHouse、StarRocks 等系统的不同设计取向。</li>
+<li>十亿行 SQL 性能优化：从执行计划、查询形态到存储组织。</li>
+<li>Java Spring Boot 分析接口实践：如何设计实时排行榜和多维分析服务。</li>
+<li>高级系统设计面试：如何在高并发、海量数据、低延迟和一致性之间进行选择。</li>
+</ol>
+<p>《数据帝国》第九章·完</p></article><section class="practice"><h2>把原理放进实验</h2><p>调整参数，观察系统如何变化。所有实验均在当前浏览器中运行。</p><a href="practice.html">查看全部交互实验 →</a> · <a href="editorial.html">内容整理与技术校正 →</a></section><nav class="chapter-nav" aria-label="上下章"><a href="chapter-08.html">← 上一章<span>千万级帝国——从零设计真正的高并发直播系统</span></a><a href="chapter-10.html">下一章 →<span>OLAP 王座——ClickHouse、StarRocks 与百亿级分析战争</span></a></nav></main></div><footer><a href="index.html">数据帝国</a><p>在故事中理解系统，在实验中观察原理。<span>现有 12 章 · 第 13 章待续</span></p><a href="https://github.com/wupzl/data-empire-reader">项目源码 ↗</a></footer>
+<dialog id="search-dialog" aria-labelledby="search-title"><div class="search-top"><h2 id="search-title">在帝国里寻找答案</h2><button id="search-close" aria-label="关闭搜索">关闭 ×</button></div><label for="query">关键词或代码，例如 Redis、背压、Checkpoint</label><input id="query" type="search" autocomplete="off" placeholder="搜索全书正文…"><p id="search-status" role="status">输入关键词，搜索 12 章内容</p><div id="search-results"></div></dialog></body></html>
