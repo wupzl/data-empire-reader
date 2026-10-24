@@ -2,6 +2,15 @@
 (() => {
   'use strict';
   const models = {
+    errorbudget: (slo, total, failed) => {
+      const ratio=(1000000-Math.round(slo*10000))/1000000;
+      const budget=Math.floor(total*ratio+1e-9);
+      return {budget,remaining:Math.max(0,budget-failed),overspent:Math.max(0,failed-budget),consumed:budget ? failed/budget*100 : failed ? Infinity : 0};
+    },
+    burnrate: (slo, total, failed) => {
+      const ratio=(1000000-Math.round(slo*10000))/1000000;
+      return total===0 ? null : ratio===0 ? (failed ? Infinity : null) : (failed/total)/ratio;
+    },
     reconcile: (deduplicate, net) => (deduplicate ? 300 : 400) - (net ? 30 : 0),
     unitcost: (monthlyYuan, requests, saving) => ({current: monthlyYuan / requests * 1000000, optimized: monthlyYuan * (1 - saving / 100) / requests * 1000000}),
     granules: count => ({scan: count, skip: 32 - count, ratio: count / 32 * 100}),
@@ -163,6 +172,32 @@
       const cost=input('月度成本（万元，0–100,000）',100,0,100000,.01), volume=input('月度请求量（亿次，0.01–100,000）',500,.01,100000,.01),saving=input('预计节省比例（0–100%）',20,0,100);
       update=()=>{const value=models.unitcost(numeric(cost)*10000,numeric(volume)*100000000,numeric(saving));show(`当前每百万请求 ¥${value.current.toFixed(2)}`,`优化后每百万请求 ¥${value.optimized.toFixed(2)}`);};
       note.textContent='假设请求量不变、成本按指定比例下降。请求量不得为零；还应核对流量结构、业务收益与 SLO 是否变化。';
+    } else if (kind === 'canary') {
+      const stages=[1,5,10,25,50,100];let at=0;
+      const previous=button('上一阶段',()=>{at=Math.max(0,at-1);update();});
+      const next=button('扩大流量',()=>{at=Math.min(stages.length-1,at+1);update();});
+      update=()=>{show(`新版本 ${stages[at]}% · 旧版本 ${100-stages[at]}%`,`阶段 ${at+1} / ${stages.length}。每次放量前核对观察窗口、样本量、可比流量、业务成功率与 P99。`);chart([stages[at],100-stages[at]],['新版本','旧版本'],'%');previous.disabled=at===0;next.disabled=at===stages.length-1;};
+      reset=()=>{at=0;};note.textContent='手动演示流量权重，不代表发布检查已通过，不连接真实环境，也不会自动放量。';
+    } else if (kind === 'faultlab') {
+      const label=document.createElement('label');label.append(text('span','选择需要验证的故障假设'));
+      const select=document.createElement('select');label.append(select);fields.append(label);
+      const cases=[
+        ['停止单个应用 Pod','剩余容量、流量摘除、客户端安全重试与副本恢复','记录请求最终状态，核对重复订单及恢复耗时。'],
+        ['消息队列短暂不可用','Outbox 保留、重试发布、积压告警与恢复后的限速','核对事件未丢失，重投不重复履约，积压能在目标时间内清空。'],
+        ['数据库延迟升高','连接池等待、排队、超时预算与入口负载保护','原稿虚构案例发现等待与排队相互放大；实际结果需由受控实验提供。'],
+        ['Flink 计算节点故障','Checkpoint 恢复时间、输入进度与外部 Sink 语义','恢复 RUNNING 后仍需核对最终统计是否重复或遗漏。']
+      ];
+      cases.forEach(([name],i)=>{const option=text('option',name);option.value=i;select.append(option);});
+      update=()=>{const [name,target,evidence]=cases[Number(select.value)];show(name,`验证目标：${target}`);output.append(text('p',`证据要求：${evidence}`),text('p','执行状态：未执行。请先定义正常状态、影响范围、停止条件和恢复目标。'));};
+      select.addEventListener('change',safe(update));reset=()=>{select.value='0';};note.textContent='这是演练计划阅读器，只展示检查项，不发起故障注入，不生成实际演练结论。';
+    } else if (kind === 'errorbudget') {
+      const slo=input('成功率 SLO（0–100%，最多四位小数）',99.9,0,100,.0001);
+      const total=input('统计周期请求数（0–1,000,000,000）',10000000,0,1000000000);
+      const failed=input('周期失败请求数（不得超过周期请求数）',4000,0,1000000000);
+      const observed=input('观察窗口请求数（0–1,000,000,000）',100000,0,1000000000);
+      const errors=input('观察窗口失败请求数',500,0,1000000000);
+      update=()=>{const target=numeric(slo),n=numeric(total),bad=numeric(failed),windowN=numeric(observed),windowBad=numeric(errors);if(bad>n||windowBad>windowN)throw Error('失败请求数不能超过对应的请求总数。');const value=models.errorbudget(target,n,bad),burn=models.burnrate(target,windowN,windowBad);show(`周期总错误预算 ${fmt(value.budget)} 次`,`预算消耗 ${Number.isFinite(value.consumed)?value.consumed.toFixed(1)+'%':'已超出零预算'} · 剩余 ${fmt(value.remaining)} 次 · 超额 ${fmt(value.overspent)} 次`);output.append(text('p',`观察窗口 Burn Rate：${burn===null?'不适用（无请求或零容错且无失败）':Number.isFinite(burn)?fmt(burn)+' 倍':'无限（零容错但已有失败）'}`));if(n===0)output.append(text('p','统计周期内没有请求，无法据此评价服务成功率。'));};
+      note.textContent='周期预算与短窗口 Burn Rate 分开计算；这里只覆盖请求成功率。整数预算向下取整，不能把预算充足直接当作允许发布的结论。';
     } else {show('该实验暂不可用'); return;}
     const run = safe(update);
     fields.addEventListener('input', run);

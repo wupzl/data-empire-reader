@@ -1,5 +1,15 @@
 const assert = require('node:assert/strict');
 const m = require('../assets/labs.js');
+assert.deepEqual(m.errorbudget(99.9,10000000,4000),{budget:10000,remaining:6000,overspent:0,consumed:40});
+assert.equal(m.errorbudget(99.99,10000000,0).budget,1000);
+assert.equal(m.errorbudget(100,100,1).consumed,Infinity);
+assert.equal(m.errorbudget(100,100,0).consumed,0);
+assert.equal(m.errorbudget(99.9,0,0).budget,0);
+assert.equal(m.errorbudget(99.9,10000000,11000).overspent,1000);
+assert.equal(m.burnrate(99.9,100000,500),5);
+assert.equal(m.burnrate(100,1,1),Infinity);
+assert.equal(m.burnrate(100,1,0),null);
+assert.equal(m.burnrate(99.9,0,0),null);
 assert.equal(m.reconcile(false,false),400);
 assert.equal(m.reconcile(true,false),300);
 assert.equal(m.reconcile(true,true),270);

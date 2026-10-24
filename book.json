@@ -47,12 +47,18 @@
     {
       "title": "终极工程——从一台 Spring Boot 到十万 QPS 的生产战场",
       "topics": "条件更新 · Outbox · 幂等 · 部署 · 分层压测"
+    },
+    {
+      "title": "永不崩溃的防线——性能回归、灰度发布与混沌工程",
+      "topics": "性能回归 · 渐进发布 · Schema 演化 · 混沌工程 · SLO"
     }
   ],
   "next": {
-    "title": "永不崩溃的防线",
-    "subtitle": "性能回归、灰度发布与混沌工程"
+    "title": "跨越大陆的战争",
+    "subtitle": "多活架构、CAP 与分布式一致性",
+    "optional": true
   },
   "source_sha256": "99bcf4cd6074d9d6485d21694d6fd8198089f3a8819015336a906205662fe278",
-  "continuation_source_sha256": "9f5852e659b8a888049352899cb80f02077f628a861920e12ce750c379781afc"
+  "continuation_source_sha256": "9f5852e659b8a888049352899cb80f02077f628a861920e12ce750c379781afc",
+  "chapter13_source_sha256": "71f7ad277825654e5e68a254cfdc2381747719b4f409a886768905220e13fe2e"
 }

@@ -70,5 +70,11 @@
     "title": "终极工程——从一台 Spring Boot 到十万 QPS 的生产战场",
     "topics": "条件更新 · Outbox · 幂等 · 部署 · 分层压测",
     "minutes": 36
+  },
+  {
+    "number": 13,
+    "title": "永不崩溃的防线——性能回归、灰度发布与混沌工程",
+    "topics": "性能回归 · 渐进发布 · Schema 演化 · 混沌工程 · SLO",
+    "minutes": 38
   }
 ]

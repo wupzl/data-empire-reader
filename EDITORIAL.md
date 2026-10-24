@@ -1,10 +1,10 @@
 # 内容整理与技术校正
 
-本项目是一部持续连载的小说式技术读物。现有十二章正文；第十三章《永不崩溃的防线——性能回归、灰度发布与混沌工程》仅有原稿预告，尚未发布。
+本项目是一部持续连载的小说式技术读物。现有十三章正文，构成当前阶段的学习主线；第十四章仅保留可选进阶设想，尚无正文。
 
 ## 原稿与维护入口
 
-`source/data-empire-original.md` 完整保存用户提供的原稿，不覆盖、不补写结局。`chapters/01.md` 至 `12.md` 为整理后的维护版本。日常修改章节后运行 `python build.py`；不必重新导入原稿。
+`source/data-empire-original.md` 完整保存用户提供的原稿，不覆盖、不补写结局。`chapters/01.md` 至 `13.md` 为整理后的维护版本。日常修改章节后运行 `python build.py`；不必重新导入原稿。
 
 保留故事、代码、技术论证、现有章末预告与图片来源。清除独立的“下一章。”对话残留、复制的站点 favicon 徽标；修复标题层级、公式转义和复制出的交互控件文本。技术架构示意保留为本地正文代码块，不依赖远程图片服务。外部场景插图保留原链接、来源和失败提示。
 
@@ -25,7 +25,7 @@
 
 ## 面试题卡补充
 
-原稿复制结果只留下每组当前可见的一道题，其他题卡与多数答案缺失。保留十一组原问题，并依据各章主题补充为 102 道可翻页、可展开答案的题卡；题卡中标注补充来源，不将补充内容冒充原稿。
+原稿复制结果只留下每组当前可见的一道题，其他题卡与多数答案缺失。保留十二组原问题，并依据各章主题补充为 112 道可翻页、可展开答案的题卡；题卡中标注补充来源，不将补充内容冒充原稿。
 
 ## 官方参考
 
@@ -62,3 +62,13 @@
 本次新增五个交互实验，并按四章各十题补齐缺失的面试题卡及参考回答。补充题卡注明来源范围。第十二章是工程蓝图，仓库不包含可直接运行的完整 Spring Boot 服务，也没有声称执行过分布式压测；Compose、Deployment、k6 均为上下文中的配置或脚本示例。
 
 技术语义参考：[MergeTree](https://clickhouse.com/docs/reference/engines/table-engines/mergetree-family/mergetree)、[增量物化视图](https://clickhouse.com/docs/concepts/features/materialized-views/incremental-materialized-view)、[Java 21 ThreadPoolExecutor](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html)、[Kubernetes HPA](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/)。
+
+## 第十三章整理
+
+第十三章原稿完整保存为 `source/data-empire-chapter13-original.md`，校验值记录在 `book.json`。整理流水线、Schema 演化、事故复盘与监控表格，删除无法还原的图表坐标残留；保留小说叙事、插图与出处。
+
+补齐 N+1 示例中的商品、优惠两类批量查询，说明空 ID 集合、大集合分批与缺失关联的业务处理边界；SQL 41 次与 3 次只作理想计数对照，不作为性能测量。补充 Burn Rate 公式、5 倍示例及恢复验收清单。示例代码仍需配套项目、依赖和迁移，未在本站运行容器或生产实验。
+
+新增金丝雀流量阶段、故障演练检查与 SLO 错误预算三个教学区。故障实验室仅展示待核对的假设与证据，不发起故障注入；金丝雀按钮仅演示权重，不判定真实发布是否安全。错误预算为按请求计数的成功率模型，处理零请求、零预算、超预算和无效输入；短窗口 Burn Rate 与周期预算分开计算。补齐十道题卡与参考回答并明确标注补充范围。
+
+前十三章作为当前学习主线；保留作者第十四章设想但改标可选进阶，不生成空正文页，不宣称已发布第十四章。

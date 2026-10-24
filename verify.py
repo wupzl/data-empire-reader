@@ -36,6 +36,7 @@ for entry in json.loads((ROOT/'docs/search.json').read_text(encoding='utf-8')):
     assert not anchor or anchor in pages[file].ids,entry
 assert hashlib.sha256((ROOT/'source/data-empire-original.md').read_bytes()).hexdigest()==json.loads((ROOT/'book.json').read_text(encoding='utf-8'))['source_sha256']
 assert hashlib.sha256((ROOT/'source/data-empire-continuation-original.md').read_bytes()).hexdigest()==BOOK['continuation_source_sha256']
+assert hashlib.sha256((ROOT/'source/data-empire-chapter13-original.md').read_bytes()).hexdigest()==BOOK['chapter13_source_sha256']
 for file in (ROOT/'chapters').glob('*.md'):
     assert file.read_text(encoding='utf-8').count('```')%2==0,file
     for code in re.findall(r'```python\n(.*?)```',file.read_text(encoding='utf-8'),re.S):
@@ -130,7 +131,20 @@ with sync_playwright() as pw:
         lab('stocksql').locator('select').select_option('lua')
         for _ in range(2): lab('stocksql').get_by_role('button',name='下一步').click()
         expect(lab('stocksql').locator('.lab-output')).to_contain_text('拒绝领取')
-        for number in range(9,13):
+        for _ in range(5): lab('canary').get_by_role('button',name='扩大流量').click()
+        expect(lab('canary').locator('.lab-output')).to_contain_text('新版本 100% · 旧版本 0%')
+        expect(lab('canary').get_by_role('button',name='扩大流量')).to_be_disabled()
+        lab('canary').get_by_role('button',name='上一阶段').click(); expect(lab('canary').locator('.lab-output')).to_contain_text('新版本 50%')
+        lab('canary').get_by_role('button',name='重置实验').click(); expect(lab('canary').locator('.lab-output')).to_contain_text('新版本 1%')
+        lab('faultlab').locator('select').select_option('2'); expect(lab('faultlab').locator('.lab-output')).to_contain_text('数据库延迟升高')
+        expect(lab('faultlab').locator('.lab-output')).to_contain_text('未执行')
+        expect(lab('errorbudget').locator('.lab-output')).to_contain_text('10,000 次')
+        expect(lab('errorbudget').locator('.lab-output')).to_contain_text('40.0%')
+        expect(lab('errorbudget').locator('.lab-output')).to_contain_text('5 倍')
+        lab('errorbudget').locator('input').first.fill('100'); expect(lab('errorbudget').locator('.lab-output')).to_contain_text('超出零预算')
+        lab('errorbudget').locator('input').nth(2).fill('10000001'); expect(lab('errorbudget').locator('.lab-output')).to_contain_text('请检查输入')
+        lab('errorbudget').get_by_role('button',name='重置实验').click()
+        for number in range(9,COUNT+1):
             page.goto(base+f'chapter-{number:02}.html')
             quiz=page.locator(f'[data-quiz="{number}"]')
             expect(quiz.locator('.eyebrow')).to_contain_text('1 / 10')
@@ -139,11 +153,13 @@ with sync_playwright() as pw:
             expect(quiz.get_by_role('button',name='下一题',exact=True)).to_be_disabled()
             target=page.locator('.concept').first if page.locator('.concept').count() else page.locator('.table-wrap').first
             target.screenshot(path=str(RESULTS/f'continuation-{number}-{width}.png'))
-        page.goto(base+f'chapter-{COUNT:02}.html'); expect(page.locator('.chapter-nav')).to_contain_text(f'第 {COUNT+1} 章尚未发布')
+        page.goto(base+f'chapter-{COUNT:02}.html'); expect(page.locator('.chapter-nav')).to_contain_text(f'第 {COUNT+1} 章为可选进阶设想')
+        assert not (ROOT/'docs'/f'chapter-{COUNT+1:02}.html').exists()
+        page.locator('[data-lab="errorbudget"]').screenshot(path=str(RESULTS/f'chapter13-budget-{width}.png'))
         page.goto(base+'chapter-11.html')
         assert page.locator('math').count()>0
         page.screenshot(path=str(RESULTS/f'chapter-{width}.png'))
         context.close()
     assert not errors,errors
     browser.close()
-print(f'PASS: {len(pages)} pages at 390/768/1440 px, links/anchors, both source archives, Python syntax, JS, labs, quizzes, themes, copy, search and progress restore.')
+print(f'PASS: {len(pages)} pages at 390/768/1440 px, links/anchors, three source archives, Python syntax, JS, 19 labs, quizzes, themes, copy, search and progress restore.')
