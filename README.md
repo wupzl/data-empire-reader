@@ -64,3 +64,6 @@ GitHub Pages 使用 `main` 分支的 `/docs` 目录。内部资源使用相对�
 
 
 项目切换菜单已接入 [Agent 帝国：代码审判者](https://wupzl.github.io/coding-agent-reader/)，九章小说式 Coding Agent 工程阅读。
+
+
+项目切换菜单已接入 [面试官的审判](https://wupzl.github.io/interview-proof-reader/)，七章技术面试小说与七组本地训练，第八章待续。
